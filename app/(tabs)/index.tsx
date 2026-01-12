@@ -1,11 +1,5 @@
-import {View, Text} from 'react-native';
+import { Redirect } from "expo-router";
 
-export default function Home() {
-  return (
-    <View className="flex-1 items-center justify-center bg-blue-400">
-      <Text className="text-2xl font-bold text-white">
-        Welcome to the Tabs Index
-      </Text>
-    </View>
-  );
+export default function Index() {
+  return <Redirect href="/welcome" />;
 }
