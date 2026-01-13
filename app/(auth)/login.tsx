@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import {
+  Alert,
   StyleSheet,
   Text,
   TextInput,
@@ -8,8 +10,34 @@ import {
   View,
 } from "react-native";
 
+import { loginWithEmail } from "../../src/services/authService";
+
 export default function Login() {
   const router = useRouter();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    if (!email.trim() || !password) {
+      Alert.alert("Error", "Please fill in all fields.");
+      return;
+    }
+    try {
+      setLoading(true);
+      await loginWithEmail(email.trim(), password);
+      router.replace("/(tabs)/home");
+    } catch (error: any) {
+      Alert.alert(
+        "Login Error",
+        error.message || "An error occurred during login."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   return (
     <View style={styles.container}>
@@ -24,6 +52,10 @@ export default function Login() {
           placeholder="Email Address"
           placeholderTextColor="#9CA3AF"
           style={styles.input}
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
         />
       </View>
 
@@ -35,6 +67,8 @@ export default function Login() {
           placeholderTextColor="#9CA3AF"
           secureTextEntry
           style={styles.input}
+          value={password}
+          onChangeText={setPassword}
         />
       </View>
 
@@ -43,11 +77,8 @@ export default function Login() {
       </TouchableOpacity>
 
     
-      <TouchableOpacity
-        style={styles.loginButton}
-        onPress={() => router.replace("/(tabs)")}
-      >
-        <Text style={styles.loginText}>Login</Text>
+      <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={loading}>
+        <Text style={styles.loginText}>{loading ? "Logging in..." : "Login"}</Text>
       </TouchableOpacity>
 
       
