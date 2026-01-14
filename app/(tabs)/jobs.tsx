@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import {
   ScrollView,
   StyleSheet,
@@ -38,13 +39,18 @@ const JOBS = [
 ];
 
 export default function Jobs() {
+  const router = useRouter();
+
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>All Jobs</Text>
 
-        <TouchableOpacity style={styles.createButton}>
+        <TouchableOpacity
+          style={styles.createButton}
+          onPress={() => router.push("/post/create")}
+        >
           <Text style={styles.createButtonText}>Create a Job</Text>
         </TouchableOpacity>
       </View>
@@ -56,7 +62,8 @@ export default function Jobs() {
             <Text style={styles.title}>{job.title}</Text>
 
             <Text style={styles.category}>
-              Category: <Text style={styles.categoryValue}>{job.category}</Text>
+              Category:{" "}
+              <Text style={styles.categoryValue}>{job.category}</Text>
             </Text>
 
             <Text style={styles.description}>{job.description}</Text>
