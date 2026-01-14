@@ -1,5 +1,6 @@
 import { db } from "../config/firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
+import { updateDoc } from "firebase/firestore";
 
 /**
  * Create user profile in Firestore
@@ -21,9 +22,7 @@ export const createUserProfile = async (
   });
 };
 
-/**
- * Get user profile from Firestore
- */
+/* Get user profile from Firestore */
 export const getUserProfile = async (uid: string) => {
   const userRef = doc(db, "users", uid);
   const snapshot = await getDoc(userRef);
@@ -33,4 +32,15 @@ export const getUserProfile = async (uid: string) => {
   }
 
   return snapshot.data();
+};
+
+export const updateUserProfile = async (
+  uid: string,
+  name: string
+) => {
+  const userRef = doc(db, "users", uid);
+
+  await updateDoc(userRef, {
+    name,
+  });
 };
