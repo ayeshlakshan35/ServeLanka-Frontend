@@ -68,9 +68,13 @@ export default function Jobs() {
 
             <Text style={styles.description}>{job.description}</Text>
 
-            <TouchableOpacity style={styles.readMoreButton}>
-              <Text style={styles.readMoreText}>Read More</Text>
-            </TouchableOpacity>
+            <TouchableOpacity
+  style={styles.readMoreButton}
+  onPress={() => router.push(`/job/${job.id}`)}
+>
+  <Text style={styles.readMoreText}>Read More</Text>
+</TouchableOpacity>
+
           </View>
         ))}
       </ScrollView>
