@@ -26,6 +26,8 @@ import { uploadToCloudinary } from "../../src/services/image";
 export default function Profile() {
   const [userData, setUserData] = useState<UserDoc | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // UI tabs (logic stays the same)
   const [tab, setTab] = useState<"profile" | "activity">("profile");
   const router = useRouter();
 
@@ -91,7 +93,7 @@ export default function Profile() {
       const uid = auth.currentUser?.uid;
       if (!uid) throw new Error("Not logged in");
 
-      // 2) Save URL in Firestore
+      // 2) Save URL in Firestore via your API
       await updateUserProfile(uid, { photoUrl: url });
 
       // 3) Update UI
@@ -130,36 +132,24 @@ export default function Profile() {
     );
   }
 
-  // ✅ verified status: before = Not Verified, after = Verified Provider
   const isVerified = isProviderApproved(userData) || !!userData?.isVerified;
 
-  // ✅ Show these like name/email
   const displayName = userData?.name?.trim() ? userData.name : "Your Name";
   const displayEmail = userData?.email || auth.currentUser?.email || "";
-
-  // If empty, show nothing (clean UI)
   const displayPhone = userData?.phone?.trim() ? userData.phone : "";
   const displayAddress = userData?.address?.trim() ? userData.address : "";
 
   return (
-    <ScrollView style={styles.container}>
-      {/* PROFILE CARD */}
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 24 }}>
+      {/* PROFILE CARD (UI updated only) */}
       <View style={styles.profileCard}>
-        {/* Edit Icon */}
-        <TouchableOpacity
-          style={styles.editIcon}
-          onPress={() => router.push("/profile/edit")}
-        >
-          <Ionicons name="pencil" size={18} color="#555" />
-        </TouchableOpacity>
-
-        {/* Avatar + Upload */}
+        {/* Avatar */}
         <TouchableOpacity onPress={pickAndUpload} activeOpacity={0.8}>
           {photoUrl ? (
             <Image source={{ uri: photoUrl }} style={styles.avatar} />
           ) : (
             <View style={styles.avatarPlaceholder}>
-              <Text style={{ fontSize: 12, color: "#6B7280" }}>No Photo</Text>
+              <Text style={{ fontSize: 11, color: "#6B7280" }}>No Photo</Text>
               <Text style={{ fontSize: 10, color: "#9CA3AF", marginTop: 2 }}>
                 Tap to add
               </Text>
@@ -167,16 +157,11 @@ export default function Profile() {
           )}
         </TouchableOpacity>
 
-        {/* Name + Email + Phone + Address */}
+        {/* Info */}
         <View style={styles.info}>
           <Text style={styles.name}>{displayName}</Text>
-
           <Text style={styles.subText}>{displayEmail}</Text>
-
-          {/* ✅ Phone (shows only if saved) */}
           {!!displayPhone && <Text style={styles.subText}>{displayPhone}</Text>}
-
-          {/* ✅ Address (shows only if saved) */}
           {!!displayAddress && <Text style={styles.subText}>{displayAddress}</Text>}
 
           {/* Verified badge */}
@@ -191,27 +176,53 @@ export default function Profile() {
           )}
         </View>
 
-        {/* Logout */}
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
+        {/* Right Side Buttons (Edit + Logout like image) */}
+        <View style={styles.rightArea}>
+          <TouchableOpacity
+            style={styles.editBtn}
+            onPress={() => router.push("/profile/edit")}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="pencil" size={16} color="#374151" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleLogout}
+            style={styles.logoutBtn}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* TABS */}
+      {/* TABS (Verify as Provider + Activity) */}
       <View style={styles.tabs}>
         <TouchableOpacity
           style={[styles.tabBtn, tab === "profile" && styles.activeTab]}
           onPress={() => setTab("profile")}
+          activeOpacity={0.9}
         >
+          <Ionicons
+            name="shield-checkmark-outline"
+            size={16}
+            color={tab === "profile" ? "#111827" : "#6B7280"}
+          />
           <Text style={[styles.tabText, tab === "profile" && styles.activeTabText]}>
-            Profile
+            Verify as Provider
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.tabBtn, tab === "activity" && styles.activeTab]}
           onPress={() => setTab("activity")}
+          activeOpacity={0.9}
         >
+          <Ionicons
+            name="pulse-outline"
+            size={16}
+            color={tab === "activity" ? "#111827" : "#6B7280"}
+          />
           <Text style={[styles.tabText, tab === "activity" && styles.activeTabText]}>
             Activity
           </Text>
@@ -221,13 +232,11 @@ export default function Profile() {
       {/* PROFILE TAB */}
       {tab === "profile" && (
         <>
-          {/* ✅ If Verified: show “completed” look (like img1 without posts) */}
           {isVerified ? (
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Provider Verification</Text>
               <Text style={styles.sectionDesc}>
-                Your provider account is verified. You can now create posts and offer
-                services.
+                Your provider account is verified. You won’t need to verify again.
               </Text>
 
               <View style={styles.row}>
@@ -252,7 +261,6 @@ export default function Profile() {
               </View>
             </View>
           ) : (
-            /* ✅ If NOT verified: show verify card + button (img3) */
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Unlock More Opportunities</Text>
               <Text style={styles.sectionDesc}>
@@ -266,6 +274,7 @@ export default function Profile() {
               <TouchableOpacity
                 onPress={() => router.push("/verify")}
                 style={styles.verifyBtn}
+                activeOpacity={0.9}
               >
                 <Text style={styles.verifyText}>Verify as Provider</Text>
               </TouchableOpacity>
@@ -300,17 +309,10 @@ const styles = StyleSheet.create({
   profileCard: {
     backgroundColor: "#fff",
     borderRadius: 14,
-    padding: 16,
+    padding: 14,
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
-    position: "relative",
-  },
-  editIcon: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    zIndex: 10,
+    marginBottom: 12,
   },
   avatar: {
     width: 56,
@@ -333,75 +335,68 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
-
-  // ✅ reuse for email/phone/address
   subText: {
     color: "#6B7280",
     marginTop: 2,
   },
 
-  verifiedBadge: {
-    alignSelf: "flex-start",
-    marginTop: 6,
-    backgroundColor: "#DCFCE7",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
+  rightArea: {
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    height: 56,
+    marginLeft: 10,
   },
-  verifiedText: {
-    color: "#166534",
-    fontSize: 12,
-    fontWeight: "700",
+  editBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
-
-  notVerifiedBadge: {
-    alignSelf: "flex-start",
-    marginTop: 6,
-    backgroundColor: "#FFEDD5",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  notVerifiedText: {
-    color: "#9A3412",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-
   logoutBtn: {
     backgroundColor: "#EF4444",
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingVertical: 7,
+    borderRadius: 8,
   },
   logoutText: {
     color: "#fff",
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 
   /* TABS */
   tabs: {
     flexDirection: "row",
-    borderRadius: 8,
+    borderRadius: 10,
     overflow: "hidden",
     backgroundColor: "#fff",
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
   },
   tabBtn: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 10,
     alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 6,
   },
   activeTab: {
     backgroundColor: "#F59E0B",
   },
   tabText: {
     color: "#6B7280",
+    fontSize: 12.5,
+    fontWeight: "600",
   },
   activeTabText: {
-    color: "#fff",
-    fontWeight: "bold",
+    color: "#111827",
+    fontWeight: "800",
   },
 
   /* CONTENT CARD */
@@ -458,6 +453,33 @@ const styles = StyleSheet.create({
   },
   statusDoneText: {
     color: "#166534",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  verifiedBadge: {
+    alignSelf: "flex-start",
+    marginTop: 6,
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  verifiedText: {
+    color: "#166534",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  notVerifiedBadge: {
+    alignSelf: "flex-start",
+    marginTop: 6,
+    backgroundColor: "#FFEDD5",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  notVerifiedText: {
+    color: "#9A3412",
     fontSize: 12,
     fontWeight: "700",
   },
