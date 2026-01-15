@@ -1,3 +1,5 @@
+// app/profile/edit.tsx
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -6,46 +8,169 @@ import {
   Image,
   StyleSheet,
   ScrollView,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
-import { useState } from "react";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 
-
+import { auth } from "../../src/config/firebase";
+import { uploadToCloudinary } from "../../src/services/image";
+import { ensureUserProfile, getUserProfile, updateUserProfile } from "../../src/services/users.api";
 
 export default function EditProfile() {
   const router = useRouter();
 
-  const [photo, setPhoto] = useState<string | null>(null);
+  // We store the REAL image URL (Cloudinary) here
+  const [photoUrl, setPhotoUrl] = useState<string>("");
+
   const [name, setName] = useState("");
-  const [profileEmail, setProfileEmail] = useState("");
+  const [profileEmail, setProfileEmail] = useState(""); // read-only display
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
 
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // ✅ Load & prefill existing saved data when screen opens
+  useEffect(() => {
+    const load = async () => {
+      const user = auth.currentUser;
+      if (!user) {
+        Alert.alert("Error", "No logged-in user found.");
+        router.back();
+        return;
+      }
+
+      try {
+        setLoading(true);
+
+        // Ensure user doc exists (if missing, create default doc)
+        await ensureUserProfile(user.uid, {
+          name: "",
+          email: user.email ?? "",
+        });
+
+        const doc = await getUserProfile(user.uid);
+
+        // Prefill fields
+        setName(doc?.name ?? "");
+        setProfileEmail(doc?.email || user.email || "");
+        setPhone(doc?.phone ?? "");
+        setAddress(doc?.address ?? "");
+        setPhotoUrl(doc?.photoUrl ?? "");
+      } catch (e: any) {
+        Alert.alert("Error", e?.message ?? "Failed to load profile");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
+  }, [router]);
+
+  // ✅ Upload picked image to Cloudinary and set the URL
+  const uploadAndSetPhoto = async (localUri: string) => {
+    try {
+      setUploading(true);
+
+      // Your service should return a string URL
+      const url = await uploadToCloudinary(localUri);
+
+      if (!url || typeof url !== "string") {
+        throw new Error("Cloudinary upload did not return a valid URL.");
+      }
+
+      setPhotoUrl(url);
+      Alert.alert("Success", "Profile photo updated.");
+    } catch (e: any) {
+      Alert.alert("Upload failed", e?.message ?? "Could not upload photo");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   // Pick image from gallery
   const pickFromGallery = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert("Permission needed", "Please allow photo access.");
+      return;
+    }
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       quality: 0.7,
+      aspect: [1, 1],
     });
 
     if (!result.canceled) {
-      setPhoto(result.assets[0].uri);
+      await uploadAndSetPhoto(result.assets[0].uri);
     }
   };
 
   // Take photo using camera
   const takePhoto = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert("Permission needed", "Please allow camera access.");
+      return;
+    }
+
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       quality: 0.7,
+      aspect: [1, 1],
     });
 
     if (!result.canceled) {
-      setPhoto(result.assets[0].uri);
+      await uploadAndSetPhoto(result.assets[0].uri);
     }
   };
+
+  // ✅ Save updated data to Firestore then go back
+  const onSave = async () => {
+    const user = auth.currentUser;
+    if (!user) {
+      Alert.alert("Error", "No logged-in user found.");
+      return;
+    }
+
+    if (!name.trim()) {
+      Alert.alert("Validation", "Name is required.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      await updateUserProfile(user.uid, {
+        name: name.trim(),
+        // email is normally from auth; keep as read-only in edit UI
+        phone: phone.trim(),
+        address: address.trim(),
+        photoUrl: photoUrl.trim(),
+      });
+
+      Alert.alert("Saved", "Profile updated successfully.");
+      router.back(); // Profile should show updated data if it reloads on focus
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "Failed to save profile");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <ActivityIndicator size="large" />
+        <Text style={{ marginTop: 10, color: "#6B7280" }}>Loading profile...</Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container}>
@@ -56,24 +181,18 @@ export default function EditProfile() {
       <View style={styles.photoContainer}>
         <Image
           source={{
-            uri: photo || "https://i.pravatar.cc/150?img=47",
+            uri: photoUrl || "https://i.pravatar.cc/150?img=47",
           }}
           style={styles.avatar}
         />
 
         <View style={styles.photoActions}>
-          <TouchableOpacity
-            onPress={pickFromGallery}
-            style={styles.photoBtn}
-          >
-            <Text style={styles.photoBtnText}>Gallery</Text>
+          <TouchableOpacity onPress={pickFromGallery} style={styles.photoBtn} disabled={uploading}>
+            <Text style={styles.photoBtnText}>{uploading ? "Uploading..." : "Gallery"}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={takePhoto}
-            style={styles.photoBtn}
-          >
-            <Text style={styles.photoBtnText}>Camera</Text>
+          <TouchableOpacity onPress={takePhoto} style={styles.photoBtn} disabled={uploading}>
+            <Text style={styles.photoBtnText}>{uploading ? "Uploading..." : "Camera"}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -91,10 +210,10 @@ export default function EditProfile() {
         <Text style={styles.label}>Profile Email</Text>
         <TextInput
           placeholder="Enter profile email"
-          style={styles.input}
+          style={[styles.input, styles.disabledInput]}
           keyboardType="email-address"
           value={profileEmail}
-          onChangeText={setProfileEmail}
+          editable={false}
         />
 
         <Text style={styles.label}>Phone Number</Text>
@@ -118,15 +237,16 @@ export default function EditProfile() {
 
       {/* ACTION BUTTONS */}
       <View style={styles.actions}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.cancelBtn}
-        >
+        <TouchableOpacity onPress={() => router.back()} style={styles.cancelBtn} disabled={saving}>
           <Text style={styles.cancelText}>Cancel</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.saveBtn}>
-          <Text style={styles.saveText}>Save</Text>
+        <TouchableOpacity
+          style={styles.saveBtn}
+          onPress={onSave}
+          disabled={saving || uploading}
+        >
+          <Text style={styles.saveText}>{saving ? "Saving..." : "Save"}</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -163,6 +283,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
+    minWidth: 90,
+    alignItems: "center",
   },
   photoBtnText: {
     color: "#fff",
@@ -184,6 +306,11 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 14,
     backgroundColor: "#fff",
+  },
+  disabledInput: {
+    borderColor: "#E5E7EB",
+    color: "#6B7280",
+    backgroundColor: "#F3F4F6",
   },
   textArea: {
     height: 80,
