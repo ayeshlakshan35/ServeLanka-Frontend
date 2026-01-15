@@ -2,23 +2,22 @@ import {
   View,
   Text,
   ActivityIndicator,
-  TextInput,
   TouchableOpacity,
+  Image,
+  StyleSheet,
+  ScrollView,
 } from "react-native";
 import { useEffect, useState } from "react";
 import { auth } from "../../src/config/firebase";
-import {
-  getUserProfile,
-  updateUserProfile,
-} from "../../src/services/users.api";
+import { getUserProfile } from "../../src/services/users.api";
 import { signOut } from "firebase/auth";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function Profile() {
   const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState("");
+  const [tab, setTab] = useState<"profile" | "activity">("profile");
   const router = useRouter();
 
   useEffect(() => {
@@ -31,17 +30,7 @@ export default function Profile() {
 
     const data = await getUserProfile(user.uid);
     setUserData(data);
-    setName(data?.name || "");
     setLoading(false);
-  };
-
-  const handleSave = async () => {
-    const user = auth.currentUser;
-    if (!user) return;
-
-    await updateUserProfile(user.uid, { name });
-    setEditing(false);
-    loadProfile();
   };
 
   const handleLogout = async () => {
@@ -51,78 +40,232 @@ export default function Profile() {
 
   if (loading) {
     return (
-      <View className="items-center justify-center flex-1">
+      <View style={styles.center}>
         <ActivityIndicator size="large" />
       </View>
     );
   }
 
   return (
-    <View className="flex-1 p-6">
-      <Text className="mb-4 text-xl font-bold">Profile</Text>
+    <ScrollView style={styles.container}>
+      {/* PROFILE CARD – MATCHES DESIGN */}
+      <View style={styles.profileCard}>
+        {/* Edit Icon */}
+        <TouchableOpacity
+          style={styles.editIcon}
+          onPress={() => router.push("/profile/edit")}
+        >
+          <Ionicons name="pencil" size={18} color="#555" />
+        </TouchableOpacity>
 
-      {editing ? (
-        <>
-          <Text className="mb-2">Name</Text>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            className="p-3 mb-4 border border-gray-300 rounded"
-          />
+        {/* Left: Avatar */}
+        <Image
+          source={{
+            uri:
+              userData.photoURL ||
+              "https://i.pravatar.cc/150?img=47",
+          }}
+          style={styles.avatar}
+        />
 
-          <TouchableOpacity
-            onPress={handleSave}
-            className="p-4 mb-2 bg-orange-500 rounded"
+        {/* Middle: Name + Email */}
+        <View style={styles.info}>
+          <Text style={styles.name}>{userData.name}</Text>
+          <Text style={styles.email}>{userData.email}</Text>
+        </View>
+
+        {/* Right: Logout */}
+        <TouchableOpacity
+          onPress={handleLogout}
+          style={styles.logoutBtn}
+        >
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* TABS */}
+      <View style={styles.tabs}>
+        <TouchableOpacity
+          style={[
+            styles.tabBtn,
+            tab === "profile" && styles.activeTab,
+          ]}
+          onPress={() => setTab("profile")}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              tab === "profile" && styles.activeTabText,
+            ]}
           >
-            <Text className="text-center text-white">Save</Text>
-          </TouchableOpacity>
+            Verify as Provider
+          </Text>
+        </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => setEditing(false)}>
-            <Text className="text-center text-gray-500">Cancel</Text>
-          </TouchableOpacity>
-        </>
-      ) : (
-        <>
-          <Text>Name: {userData.name}</Text>
-          <Text>Email: {userData.email}</Text>
-          <Text>Role: {userData.role}</Text>
-          <Text>
-            Verified: {userData.isVerified ? "Yes" : "No"}
+        <TouchableOpacity
+          style={[
+            styles.tabBtn,
+            tab === "activity" && styles.activeTab,
+          ]}
+          onPress={() => setTab("activity")}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              tab === "activity" && styles.activeTabText,
+            ]}
+          >
+            Activity
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* PROFILE TAB (USER) */}
+      {tab === "profile" && userData.role === "user" && (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>
+            Unlock More Opportunities
+          </Text>
+          <Text style={styles.sectionDesc}>
+            Join our verified provider network and expand your reach.
           </Text>
 
-          {userData.role === "user" && (
-            <TouchableOpacity
-              onPress={() => router.push("/verify/index")}
-              className="p-4 mt-4 bg-orange-500 rounded"
-            >
-              <Text className="text-center text-white">
-                Verify as Provider
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {userData.role === "provider" && (
-            <View className="mt-4">
-              <Text>⭐ Rating: 4.5</Text>
-              <Text>My Services</Text>
-            </View>
-          )}
+          <Text style={styles.benefit}>🎯 Increased Work Opportunities</Text>
+          <Text style={styles.benefit}>💰 Higher Earning Potential</Text>
+          <Text style={styles.benefit}>✅ Trusted Provider Badge</Text>
 
           <TouchableOpacity
-            onPress={() => setEditing(true)}
-            className="p-4 mt-6 bg-orange-500 rounded"
+            onPress={() => router.push("/verify")}
+            style={styles.verifyBtn}
           >
-            <Text className="text-center text-white">Edit Profile</Text>
+            <Text style={styles.verifyText}>
+              Verify as Provider
+            </Text>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={handleLogout}
-            className="p-4 mt-4 bg-red-500 rounded"
-          >
-            <Text className="text-center text-white">Logout</Text>
-          </TouchableOpacity>
-        </>
+        </View>
       )}
-    </View>
+
+      {/* ACTIVITY TAB */}
+      {tab === "activity" && (
+        <View style={styles.center}>
+          <Text style={styles.email}>No activity yet</Text>
+        </View>
+      )}
+    </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    backgroundColor: "#F3F4F6",
+    padding: 16,
+    flex: 1,
+  },
+  center: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 40,
+  },
+
+  /* PROFILE CARD */
+  profileCard: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    position: "relative",
+  },
+  editIcon: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+  },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+  },
+  info: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  name: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  email: {
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  logoutBtn: {
+    backgroundColor: "#EF4444",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  logoutText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
+  /* TABS */
+  tabs: {
+    flexDirection: "row",
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: "#fff",
+    marginBottom: 16,
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  activeTab: {
+    backgroundColor: "#F59E0B",
+  },
+  tabText: {
+    color: "#6B7280",
+  },
+  activeTabText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+
+  /* CONTENT CARD */
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 6,
+    textAlign: "center",
+  },
+  sectionDesc: {
+    color: "#6B7280",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  benefit: {
+    marginBottom: 6,
+    textAlign: "center",
+  },
+  verifyBtn: {
+    marginTop: 14,
+    backgroundColor: "#F59E0B",
+    paddingVertical: 14,
+    borderRadius: 10,
+  },
+  verifyText: {
+    color: "#fff",
+    textAlign: "center",
+    fontWeight: "bold",
+  },
+});
