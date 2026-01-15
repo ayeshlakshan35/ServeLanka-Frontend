@@ -1,6 +1,5 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-
 import {
   Alert,
   StyleSheet,
@@ -10,7 +9,9 @@ import {
   View,
 } from "react-native";
 
+import { auth } from "../../src/config/firebase";
 import { registerWithEmail } from "../../src/services/authService";
+import { createUserProfile } from "../../src/services/users.api";
 
 export default function Register() {
   const router = useRouter();
@@ -28,9 +29,25 @@ export default function Register() {
 
     try {
       setLoading(true);
+
+      // 1️⃣ Firebase Auth (UNCHANGED – your working logic)
       await registerWithEmail(name.trim(), email.trim(), password);
+
+      // 2️⃣ Get current user from Firebase Auth
+      const user = auth.currentUser;
+
+      if (!user) {
+        throw new Error("User not found after registration");
+      }
+
+      // 3️⃣ Save user profile in Firestore
+      await createUserProfile(user.uid, name.trim(), email.trim());
+
       Alert.alert("Success", "Account created successfully!");
+
+      // 4️⃣ Go to login (or home if you prefer)
       router.replace("/login");
+
     } catch (error: any) {
       Alert.alert(
         "Registration Error",
@@ -87,7 +104,8 @@ export default function Register() {
 
       <TouchableOpacity onPress={() => router.replace("/login")}>
         <Text style={styles.loginText}>
-          Already have an account? <Text style={styles.loginLink}>Login</Text>
+          Already have an account?{" "}
+          <Text style={styles.loginLink}>Login</Text>
         </Text>
       </TouchableOpacity>
     </View>
