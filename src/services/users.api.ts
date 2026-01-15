@@ -1,5 +1,10 @@
 import { db } from "../config/firebase";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import {
+  doc,
+  setDoc,
+  getDoc,
+  updateDoc,
+} from "firebase/firestore";
 
 /**
  * Create user profile in Firestore
@@ -33,4 +38,19 @@ export const getUserProfile = async (uid: string) => {
   }
 
   return snapshot.data();
+};
+
+/**
+ * Update user profile (generic & scalable)
+ */
+export const updateUserProfile = async (
+  uid: string,
+  data: Partial<{
+    name: string;
+    role: "user" | "provider";
+    isVerified: boolean;
+  }>
+) => {
+  const userRef = doc(db, "users", uid);
+  await updateDoc(userRef, data);
 };
