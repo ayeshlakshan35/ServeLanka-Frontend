@@ -1,25 +1,58 @@
-import {
-  View,
-  Text,
-  ActivityIndicator,
-  TouchableOpacity,
-  Image,
-  StyleSheet,
-  ScrollView,
-} from "react-native";
+import {View,Text, ActivityIndicator,TouchableOpacity,Image,StyleSheet,ScrollView, Alert,} from "react-native";
 import { useEffect, useState } from "react";
-import { auth } from "../../src/config/firebase";
+import { auth, db } from "../../src/config/firebase";
 import { getUserProfile } from "../../src/services/users.api";
 import { signOut } from "firebase/auth";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import { uploadToCloudinary } from "../../src/services/image";
+import { doc, setDoc } from "firebase/firestore";
 
 export default function Profile() {
   const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"profile" | "activity">("profile");
   const router = useRouter();
-
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  
+    const pickAndUpload = async () => {
+      try {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert("Permission needed", "Please allow photo access.");
+          return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          quality: 0.8,
+        });
+  
+        if (result.canceled) return;
+  
+        setLoading(true);
+  
+        // 1) Upload to Cloudinary
+        const url = await uploadToCloudinary(result.assets[0].uri);
+  
+        // 2) Save URL in Firestore
+        const uid = auth.currentUser?.uid;
+        if (!uid) throw new Error("Not logged in");
+  
+        await setDoc(doc(db, "users", uid), { photoUrl: url }, { merge: true });
+  
+        // 3) Update UI
+        setPhotoUrl(url);
+  
+        Alert.alert("Success", "Profile photo updated!");
+      } catch (e: any) {
+        Alert.alert("Upload failed", e?.message || "Error");
+      } finally {
+        setLoading(false);
+      }
+    };
+    
   useEffect(() => {
     loadProfile();
   }, []);
@@ -59,15 +92,31 @@ export default function Profile() {
         </TouchableOpacity>
 
         {/* Left: Avatar */}
-        <Image
-          source={{
-            uri:
-              userData.photoURL ||
-              "https://i.pravatar.cc/150?img=47",
-          }}
-          style={styles.avatar}
-        />
+        <View style={{ flex: 1, padding: 20, gap: 16 }}>
+      <Text style={{ fontSize: 22, fontWeight: "700" }}>Profile</Text>
 
+      {photoUrl ? (
+        <Image
+          source={{ uri: photoUrl }}
+          style={{ width: 120, height: 120, borderRadius: 60 }}
+        />
+      ) : (
+        <View
+          style={{
+            width: 120,
+            height: 120,
+            borderRadius: 60,
+            backgroundColor: "#E5E7EB",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text>No Photo</Text>
+        </View>
+      )}
+
+    </View>
+  );
         {/* Middle: Name + Email */}
         <View style={styles.info}>
           <Text style={styles.name}>{userData.name}</Text>
