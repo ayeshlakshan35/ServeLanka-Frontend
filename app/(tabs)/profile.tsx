@@ -27,11 +27,9 @@ export default function Profile() {
   const [userData, setUserData] = useState<UserDoc | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // UI tabs (logic stays the same)
   const [tab, setTab] = useState<"profile" | "activity">("profile");
   const router = useRouter();
 
-  // Photo URL from Firestore
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   const loadProfile = useCallback(async () => {
@@ -45,7 +43,6 @@ export default function Profile() {
 
       setLoading(true);
 
-      // ✅ Ensure doc exists
       await ensureUserProfile(user.uid, {
         email: user.email ?? "",
         name: "",
@@ -62,7 +59,6 @@ export default function Profile() {
     }
   }, []);
 
-  // ✅ Refresh when returning from edit/verify screens
   useFocusEffect(
     useCallback(() => {
       loadProfile();
@@ -87,16 +83,12 @@ export default function Profile() {
 
       setLoading(true);
 
-      // 1) Upload to Cloudinary
       const url = await uploadToCloudinary(result.assets[0].uri);
 
       const uid = auth.currentUser?.uid;
       if (!uid) throw new Error("Not logged in");
 
-      // 2) Save URL in Firestore via your API
       await updateUserProfile(uid, { photoUrl: url });
-
-      // 3) Update UI
       setPhotoUrl(url);
 
       Alert.alert("Success", "Profile photo updated!");
@@ -140,11 +132,16 @@ export default function Profile() {
   const displayAddress = userData?.address?.trim() ? userData.address : "";
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 24 }}>
-      {/* PROFILE CARD (UI updated only) */}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      <Text style={styles.pageTitle}>Profile</Text>
+
       <View style={styles.profileCard}>
-        {/* Avatar */}
-        <TouchableOpacity onPress={pickAndUpload} activeOpacity={0.8}>
+        <TouchableOpacity onPress={pickAndUpload} activeOpacity={0.85}>
           {photoUrl ? (
             <Image source={{ uri: photoUrl }} style={styles.avatar} />
           ) : (
@@ -157,46 +154,44 @@ export default function Profile() {
           )}
         </TouchableOpacity>
 
-        {/* Info */}
-        <View style={styles.info}>
+        {/* ✅ pointerEvents box-none so the absolute edit button receives taps */}
+        <View style={styles.info} pointerEvents="box-none">
+          <TouchableOpacity
+            style={styles.editBtnInline}
+            onPress={() => router.push("/profile/edit")}
+            activeOpacity={0.85}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Ionicons name="pencil" size={16} color="#374151" />
+          </TouchableOpacity>
+
           <Text style={styles.name}>{displayName}</Text>
           <Text style={styles.subText}>{displayEmail}</Text>
           {!!displayPhone && <Text style={styles.subText}>{displayPhone}</Text>}
           {!!displayAddress && <Text style={styles.subText}>{displayAddress}</Text>}
 
-          {/* Verified badge */}
-          {isVerified ? (
-            <View style={styles.verifiedBadge}>
-              <Text style={styles.verifiedText}>Verified Provider</Text>
-            </View>
-          ) : (
-            <View style={styles.notVerifiedBadge}>
-              <Text style={styles.notVerifiedText}>Not Verified</Text>
-            </View>
-          )}
-        </View>
+          <View style={styles.badgeRow}>
+            {isVerified ? (
+              <View style={styles.verifiedBadge}>
+                <Text style={styles.verifiedText}>Verified Provider</Text>
+              </View>
+            ) : (
+              <View style={styles.notVerifiedBadge}>
+                <Text style={styles.notVerifiedText}>Not Verified</Text>
+              </View>
+            )}
 
-        {/* Right Side Buttons (Edit + Logout like image) */}
-        <View style={styles.rightArea}>
-          <TouchableOpacity
-            style={styles.editBtn}
-            onPress={() => router.push("/profile/edit")}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="pencil" size={16} color="#374151" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={handleLogout}
-            style={styles.logoutBtn}
-            activeOpacity={0.9}
-          >
-            <Text style={styles.logoutText}>Logout</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleLogout}
+              style={styles.logoutBtn}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
-      {/* TABS (Verify as Provider + Activity) */}
       <View style={styles.tabs}>
         <TouchableOpacity
           style={[styles.tabBtn, tab === "profile" && styles.activeTab]}
@@ -229,7 +224,6 @@ export default function Profile() {
         </TouchableOpacity>
       </View>
 
-      {/* PROFILE TAB */}
       {tab === "profile" && (
         <>
           {isVerified ? (
@@ -267,9 +261,25 @@ export default function Profile() {
                 Join our verified provider network and expand your reach.
               </Text>
 
-              <Text style={styles.benefit}>🎯 Increased Work Opportunities</Text>
-              <Text style={styles.benefit}>💰 Higher Earning Potential</Text>
-              <Text style={styles.benefit}>✅ Trusted Provider Badge</Text>
+              <View style={styles.benefits}>
+                <View style={styles.benefitRow}>
+                  <Ionicons name="briefcase-outline" size={18} color="#F59E0B" />
+                  <Text style={styles.benefitText}>Increased Work Opportunities</Text>
+                </View>
+
+                <View style={styles.benefitRow}>
+                  <Ionicons name="cash-outline" size={18} color="#F59E0B" />
+                  <Text style={styles.benefitText}>Higher Earning Potential</Text>
+                </View>
+
+                <View style={styles.benefitRow}>
+                  <Ionicons name="shield-checkmark-outline" size={18} color="#F59E0B" />
+                  <Text style={styles.benefitText}>Trusted Provider Badge</Text>
+                </View>
+              </View>
+
+              <View style={styles.divider} />
+              <Text style={styles.smallHint}>Over 120 providers verified in your area!</Text>
 
               <TouchableOpacity
                 onPress={() => router.push("/verify")}
@@ -283,9 +293,8 @@ export default function Profile() {
         </>
       )}
 
-      {/* ACTIVITY TAB */}
       {tab === "activity" && (
-        <View style={styles.center}>
+        <View style={styles.activityWrap}>
           <Text style={styles.subText}>No activity yet</Text>
         </View>
       )}
@@ -294,18 +303,18 @@ export default function Profile() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: "#F3F4F6",
-    padding: 16,
-    flex: 1,
-  },
-  center: {
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 40,
+  container: { backgroundColor: "#F3F4F6", flex: 1 },
+  content: { padding: 16, paddingBottom: 14 },
+
+  pageTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 10,
+    color: "#111827",
   },
 
-  /* PROFILE CARD */
+  center: { alignItems: "center", justifyContent: "center", marginTop: 40 },
+
   profileCard: {
     backgroundColor: "#fff",
     borderRadius: 14,
@@ -314,11 +323,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-  },
+  avatar: { width: 56, height: 56, borderRadius: 28 },
   avatarPlaceholder: {
     width: 56,
     height: 56,
@@ -330,23 +335,15 @@ const styles = StyleSheet.create({
   info: {
     flex: 1,
     marginLeft: 12,
-  },
-  name: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  subText: {
-    color: "#6B7280",
-    marginTop: 2,
+    position: "relative",
+    paddingRight: 4,
   },
 
-  rightArea: {
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    height: 56,
-    marginLeft: 10,
-  },
-  editBtn: {
+  // ✅ Make sure it is always on top (Android needs elevation)
+  editBtnInline: {
+    position: "absolute",
+    right: 0,
+    top: 0,
     width: 30,
     height: 30,
     borderRadius: 8,
@@ -355,26 +352,51 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "#E5E7EB",
+    zIndex: 50,
+    elevation: 8,
   },
+
+  name: { fontSize: 16, fontWeight: "bold", paddingRight: 36 },
+  subText: { color: "#6B7280", marginTop: 2, paddingRight: 36 },
+
+  badgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+
+  verifiedBadge: {
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  verifiedText: { color: "#166534", fontSize: 12, fontWeight: "700" },
+
+  notVerifiedBadge: {
+    backgroundColor: "#FFEDD5",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  notVerifiedText: { color: "#9A3412", fontSize: 12, fontWeight: "700" },
+
   logoutBtn: {
     backgroundColor: "#EF4444",
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 8,
+    marginLeft: 10,
   },
-  logoutText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "700",
-  },
+  logoutText: { color: "#fff", fontSize: 12, fontWeight: "700" },
 
-  /* TABS */
   tabs: {
     flexDirection: "row",
     borderRadius: 10,
     overflow: "hidden",
     backgroundColor: "#fff",
-    marginBottom: 16,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: "#F3F4F6",
   },
@@ -386,52 +408,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 6,
   },
-  activeTab: {
-    backgroundColor: "#F59E0B",
-  },
-  tabText: {
-    color: "#6B7280",
-    fontSize: 12.5,
-    fontWeight: "600",
-  },
-  activeTabText: {
-    color: "#111827",
-    fontWeight: "800",
-  },
+  activeTab: { backgroundColor: "#F59E0B" },
+  tabText: { color: "#6B7280", fontSize: 12.5, fontWeight: "600" },
+  activeTabText: { color: "#111827", fontWeight: "800" },
 
-  /* CONTENT CARD */
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 6,
-    textAlign: "center",
-  },
-  sectionDesc: {
-    color: "#6B7280",
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  benefit: {
-    marginBottom: 6,
-    textAlign: "center",
-  },
-  verifyBtn: {
-    marginTop: 14,
-    backgroundColor: "#F59E0B",
-    paddingVertical: 14,
-    borderRadius: 10,
-  },
-  verifyText: {
-    color: "#fff",
-    textAlign: "center",
-    fontWeight: "bold",
-  },
+  card: { backgroundColor: "#fff", borderRadius: 12, padding: 16, marginBottom: 10 },
+  sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 6, textAlign: "center" },
+  sectionDesc: { color: "#6B7280", marginBottom: 12, textAlign: "center" },
+
+  benefits: { marginTop: 6, gap: 10, paddingHorizontal: 4 },
+  benefitRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  benefitText: { color: "#111827", fontWeight: "600" },
+
+  divider: { height: 1, backgroundColor: "#E5E7EB", marginTop: 14, marginBottom: 10 },
+  smallHint: { textAlign: "center", color: "#6B7280", fontSize: 12, marginBottom: 12 },
+
+  verifyBtn: { backgroundColor: "#F59E0B", paddingVertical: 14, borderRadius: 10 },
+  verifyText: { color: "#fff", textAlign: "center", fontWeight: "bold" },
 
   row: {
     flexDirection: "row",
@@ -441,46 +434,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#E5E7EB",
   },
-  rowText: {
-    color: "#111827",
-    fontWeight: "600",
-  },
-  statusDone: {
-    backgroundColor: "#DCFCE7",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  statusDoneText: {
-    color: "#166534",
-    fontSize: 12,
-    fontWeight: "700",
-  },
+  rowText: { color: "#111827", fontWeight: "600" },
+  statusDone: { backgroundColor: "#DCFCE7", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  statusDoneText: { color: "#166534", fontSize: 12, fontWeight: "700" },
 
-  verifiedBadge: {
-    alignSelf: "flex-start",
-    marginTop: 6,
-    backgroundColor: "#DCFCE7",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  verifiedText: {
-    color: "#166534",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  notVerifiedBadge: {
-    alignSelf: "flex-start",
-    marginTop: 6,
-    backgroundColor: "#FFEDD5",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  notVerifiedText: {
-    color: "#9A3412",
-    fontSize: 12,
-    fontWeight: "700",
-  },
+  activityWrap: { backgroundColor: "#fff", borderRadius: 12, padding: 16 },
 });
