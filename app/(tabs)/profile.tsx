@@ -138,8 +138,8 @@ export default function Profile() {
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.pageTitle}>Profile</Text>
 
+      {/* PROFILE CARD */}
       <View style={styles.profileCard}>
         <TouchableOpacity onPress={pickAndUpload} activeOpacity={0.85}>
           {photoUrl ? (
@@ -154,7 +154,6 @@ export default function Profile() {
           )}
         </TouchableOpacity>
 
-        {/* ✅ pointerEvents box-none so the absolute edit button receives taps */}
         <View style={styles.info} pointerEvents="box-none">
           <TouchableOpacity
             style={styles.editBtnInline}
@@ -192,9 +191,13 @@ export default function Profile() {
         </View>
       </View>
 
-      <View style={styles.tabs}>
+      {/* ✅ TABS LIKE LEFT IMAGE (NO WHITE ROUNDED CONTAINER) */}
+      <View style={styles.tabsRow}>
         <TouchableOpacity
-          style={[styles.tabBtn, tab === "profile" && styles.activeTab]}
+          style={[
+            styles.tabPill,
+            tab === "profile" ? styles.tabActive : styles.tabInactiveLeft,
+          ]}
           onPress={() => setTab("profile")}
           activeOpacity={0.9}
         >
@@ -203,13 +206,21 @@ export default function Profile() {
             size={16}
             color={tab === "profile" ? "#111827" : "#6B7280"}
           />
-          <Text style={[styles.tabText, tab === "profile" && styles.activeTabText]}>
+          <Text
+            style={[
+              styles.tabLabel,
+              tab === "profile" ? styles.tabLabelActive : styles.tabLabelInactive,
+            ]}
+          >
             Verify as Provider
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.tabBtn, tab === "activity" && styles.activeTab]}
+          style={[
+            styles.tabPill,
+            tab === "activity" ? styles.tabActive : styles.tabInactiveRight,
+          ]}
           onPress={() => setTab("activity")}
           activeOpacity={0.9}
         >
@@ -218,12 +229,21 @@ export default function Profile() {
             size={16}
             color={tab === "activity" ? "#111827" : "#6B7280"}
           />
-          <Text style={[styles.tabText, tab === "activity" && styles.activeTabText]}>
+          <Text
+            style={[
+              styles.tabLabel,
+              tab === "activity" ? styles.tabLabelActive : styles.tabLabelInactive,
+            ]}
+          >
             Activity
           </Text>
         </TouchableOpacity>
       </View>
 
+      {/* spacing like left image */}
+      <View style={{ height: 14 }} />
+
+      {/* MAIN CONTENT */}
       {tab === "profile" && (
         <>
           {isVerified ? (
@@ -261,35 +281,37 @@ export default function Profile() {
                 Join our verified provider network and expand your reach.
               </Text>
 
+              {/* ✅ spacing + alignment like left image */}
               <View style={styles.benefits}>
                 <View style={styles.benefitRow}>
-                  <Ionicons name="briefcase-outline" size={18} color="#F59E0B" />
+                  <Ionicons name="briefcase-outline" size={20} color="#F59E0B" />
                   <Text style={styles.benefitText}>Increased Work Opportunities</Text>
                 </View>
 
                 <View style={styles.benefitRow}>
-                  <Ionicons name="cash-outline" size={18} color="#F59E0B" />
+                  <Ionicons name="cash-outline" size={20} color="#F59E0B" />
                   <Text style={styles.benefitText}>Higher Earning Potential</Text>
                 </View>
 
                 <View style={styles.benefitRow}>
-                  <Ionicons name="shield-checkmark-outline" size={18} color="#F59E0B" />
+                  <Ionicons
+                    name="shield-checkmark-outline"
+                    size={20}
+                    color="#F59E0B"
+                  />
                   <Text style={styles.benefitText}>Trusted Provider Badge</Text>
                 </View>
               </View>
+            </View>
+          )}
 
-              <View style={styles.divider} />
-              <Text style={styles.smallHint}>Over 120 providers verified in your area!</Text>
-
-              <TouchableOpacity
+          <TouchableOpacity
                 onPress={() => router.push("/verify")}
                 style={styles.verifyBtn}
                 activeOpacity={0.9}
               >
-                <Text style={styles.verifyText}>Verify as Provider</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+              <Text style={styles.verifyText}>Verify as Provider</Text>
+          </TouchableOpacity>
         </>
       )}
 
@@ -304,17 +326,10 @@ export default function Profile() {
 
 const styles = StyleSheet.create({
   container: { backgroundColor: "#F3F4F6", flex: 1 },
-  content: { padding: 16, paddingBottom: 14 },
+  content: { padding: 16, paddingBottom: 18 },
 
-  pageTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 10,
-    color: "#111827",
-  },
-
-  center: { alignItems: "center", justifyContent: "center", marginTop: 40 },
-
+ 
+  
   profileCard: {
     backgroundColor: "#fff",
     borderRadius: 14,
@@ -322,16 +337,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
+    
   },
-  avatar: { width: 56, height: 56, borderRadius: 28 },
+
+  avatar: { width: 116, height: 116, borderRadius: 58 },
   avatarPlaceholder: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 116,
+    height: 116,
+    borderRadius: 58,
     backgroundColor: "#E5E7EB",
     alignItems: "center",
     justifyContent: "center",
   },
+
   info: {
     flex: 1,
     marginLeft: 12,
@@ -339,7 +357,6 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
 
-  // ✅ Make sure it is always on top (Android needs elevation)
   editBtnInline: {
     position: "absolute",
     right: 0,
@@ -363,7 +380,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 8,
+    marginTop: 10,
   },
 
   verifiedBadge: {
@@ -391,40 +408,95 @@ const styles = StyleSheet.create({
   },
   logoutText: { color: "#fff", fontSize: 12, fontWeight: "700" },
 
-  tabs: {
+  /* ✅ tabs like left image */
+  tabsRow: {
     flexDirection: "row",
-    borderRadius: 10,
-    overflow: "hidden",
-    backgroundColor: "#fff",
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#F3F4F6",
+    marginTop: 5,
+    
   },
-  tabBtn: {
+  tabPill: {
     flex: 1,
     paddingVertical: 10,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
     gap: 6,
   },
-  activeTab: { backgroundColor: "#F59E0B" },
-  tabText: { color: "#6B7280", fontSize: 12.5, fontWeight: "600" },
-  activeTabText: { color: "#111827", fontWeight: "800" },
+  tabActive: {
+    backgroundColor: "#F59E0B",
+    borderWidth: 1,
+    borderColor: "#F59E0B",
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
+  },
+  tabInactiveLeft: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#F59E0B",
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
+  },
+  tabInactiveRight: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#F59E0B",
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
+    marginLeft: -1, // makes border join clean
+  },
+  tabLabel: {
+    fontSize: 12.5,
+    fontWeight: "700",
+  },
+  tabLabelActive: {
+    color: "#111827",
+  },
+  tabLabelInactive: {
+    color: "#6B7280",
+  },
 
-  card: { backgroundColor: "#fff", borderRadius: 12, padding: 16, marginBottom: 10 },
-  sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 6, textAlign: "center" },
-  sectionDesc: { color: "#6B7280", marginBottom: 12, textAlign: "center" },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    paddingVertical: 46,
+    paddingHorizontal: 16,
+    marginTop: 5,
+  },
 
-  benefits: { marginTop: 6, gap: 10, paddingHorizontal: 4 },
-  benefitRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  sectionDesc: {
+    color: "#6B7280",
+    marginBottom: 16,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+
+  benefits: {
+    marginTop: 10,
+    gap: 25,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  benefitRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   benefitText: { color: "#111827", fontWeight: "600" },
 
-  divider: { height: 1, backgroundColor: "#E5E7EB", marginTop: 14, marginBottom: 10 },
-  smallHint: { textAlign: "center", color: "#6B7280", fontSize: 12, marginBottom: 12 },
-
-  verifyBtn: { backgroundColor: "#F59E0B", paddingVertical: 14, borderRadius: 10 },
-  verifyText: { color: "#fff", textAlign: "center", fontWeight: "bold" },
+  verifyBtn: {
+    backgroundColor: "#F59E0B",
+    paddingVertical: 15,
+    borderRadius: 10,
+    marginTop: 45,
+  },
+  verifyText: {
+    color: "#fff",
+    textAlign: "center",
+    fontWeight: "bold",
+    fontSize: 15,
+  },
 
   row: {
     flexDirection: "row",
@@ -435,7 +507,12 @@ const styles = StyleSheet.create({
     borderTopColor: "#E5E7EB",
   },
   rowText: { color: "#111827", fontWeight: "600" },
-  statusDone: { backgroundColor: "#DCFCE7", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  statusDone: {
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
   statusDoneText: { color: "#166534", fontSize: 12, fontWeight: "700" },
 
   activityWrap: { backgroundColor: "#fff", borderRadius: 12, padding: 16 },
