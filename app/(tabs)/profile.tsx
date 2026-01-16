@@ -131,6 +131,19 @@ export default function Profile() {
   const displayPhone = userData?.phone?.trim() ? userData.phone : "";
   const displayAddress = userData?.address?.trim() ? userData.address : "";
 
+  // ✅ Labels change based on verification state
+  const leftTabLabel = isVerified ? "Profile" : "Verify as Provider";
+  const bottomBtnLabel = isVerified ? "Create Post" : "Verify as Provider";
+
+  const onPressBottomButton = () => {
+    if (isVerified) {
+      // ✅ Change this route if your create-post screen is different
+      router.push("/post/create");
+      return;
+    }
+    router.push("/verify");
+  };
+
   return (
     <ScrollView
       style={styles.container}
@@ -138,7 +151,6 @@ export default function Profile() {
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
-
       {/* PROFILE CARD */}
       <View style={styles.profileCard}>
         <TouchableOpacity onPress={pickAndUpload} activeOpacity={0.85}>
@@ -191,7 +203,7 @@ export default function Profile() {
         </View>
       </View>
 
-      {/* ✅ TABS LIKE LEFT IMAGE (NO WHITE ROUNDED CONTAINER) */}
+      {/* TABS */}
       <View style={styles.tabsRow}>
         <TouchableOpacity
           style={[
@@ -212,7 +224,7 @@ export default function Profile() {
               tab === "profile" ? styles.tabLabelActive : styles.tabLabelInactive,
             ]}
           >
-            Verify as Provider
+            {leftTabLabel}
           </Text>
         </TouchableOpacity>
 
@@ -240,17 +252,17 @@ export default function Profile() {
         </TouchableOpacity>
       </View>
 
-      {/* spacing like left image */}
       <View style={{ height: 14 }} />
 
       {/* MAIN CONTENT */}
       {tab === "profile" && (
         <>
           {isVerified ? (
+            // ✅ Your “4th image / verified content” area (replace text with your exact UI)
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Provider Verification</Text>
               <Text style={styles.sectionDesc}>
-                Your provider account is verified. You won’t need to verify again.
+                Your provider account is verified. You can now create posts and receive jobs.
               </Text>
 
               <View style={styles.row}>
@@ -275,13 +287,13 @@ export default function Profile() {
               </View>
             </View>
           ) : (
+            // ❌ Not verified → show original promo card
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Unlock More Opportunities</Text>
               <Text style={styles.sectionDesc}>
                 Join our verified provider network and expand your reach.
               </Text>
 
-              {/* ✅ spacing + alignment like left image */}
               <View style={styles.benefits}>
                 <View style={styles.benefitRow}>
                   <Ionicons name="briefcase-outline" size={20} color="#F59E0B" />
@@ -294,23 +306,20 @@ export default function Profile() {
                 </View>
 
                 <View style={styles.benefitRow}>
-                  <Ionicons
-                    name="shield-checkmark-outline"
-                    size={20}
-                    color="#F59E0B"
-                  />
+                  <Ionicons name="shield-checkmark-outline" size={20} color="#F59E0B" />
                   <Text style={styles.benefitText}>Trusted Provider Badge</Text>
                 </View>
               </View>
             </View>
           )}
 
+          {/* Bottom button changes based on verified state */}
           <TouchableOpacity
-                onPress={() => router.push("/verify")}
-                style={styles.verifyBtn}
-                activeOpacity={0.9}
-              >
-              <Text style={styles.verifyText}>Verify as Provider</Text>
+            onPress={onPressBottomButton}
+            style={styles.verifyBtn}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.verifyText}>{bottomBtnLabel}</Text>
           </TouchableOpacity>
         </>
       )}
@@ -328,8 +337,6 @@ const styles = StyleSheet.create({
   container: { backgroundColor: "#F3F4F6", flex: 1 },
   content: { padding: 16, paddingBottom: 18 },
 
- 
-  
   profileCard: {
     backgroundColor: "#fff",
     borderRadius: 14,
@@ -337,7 +344,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
-    
   },
 
   avatar: { width: 116, height: 116, borderRadius: 58 },
@@ -408,12 +414,7 @@ const styles = StyleSheet.create({
   },
   logoutText: { color: "#fff", fontSize: 12, fontWeight: "700" },
 
-  /* ✅ tabs like left image */
-  tabsRow: {
-    flexDirection: "row",
-    marginTop: 5,
-    
-  },
+  tabsRow: { flexDirection: "row", marginTop: 5 },
   tabPill: {
     flex: 1,
     paddingVertical: 10,
@@ -442,18 +443,11 @@ const styles = StyleSheet.create({
     borderColor: "#F59E0B",
     borderTopRightRadius: 8,
     borderBottomRightRadius: 8,
-    marginLeft: -1, // makes border join clean
+    marginLeft: -1,
   },
-  tabLabel: {
-    fontSize: 12.5,
-    fontWeight: "700",
-  },
-  tabLabelActive: {
-    color: "#111827",
-  },
-  tabLabelInactive: {
-    color: "#6B7280",
-  },
+  tabLabel: { fontSize: 12.5, fontWeight: "700" },
+  tabLabelActive: { color: "#111827" },
+  tabLabelInactive: { color: "#6B7280" },
 
   card: {
     backgroundColor: "#fff",
@@ -499,11 +493,10 @@ const styles = StyleSheet.create({
   },
 
   center: {
-  flex: 1,
-  justifyContent: "center",
-  alignItems: "center",
-},
-
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 
   row: {
     flexDirection: "row",
