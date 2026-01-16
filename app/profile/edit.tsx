@@ -10,13 +10,20 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  SafeAreaView,
+  Platform,
+  StatusBar,
 } from "react-native";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 
 import { auth } from "../../src/config/firebase";
 import { uploadToCloudinary } from "../../src/services/image";
-import { ensureUserProfile, getUserProfile, updateUserProfile } from "../../src/services/users.api";
+import {
+  ensureUserProfile,
+  getUserProfile,
+  updateUserProfile,
+} from "../../src/services/users.api";
 
 export default function EditProfile() {
   const router = useRouter();
@@ -75,7 +82,6 @@ export default function EditProfile() {
     try {
       setUploading(true);
 
-      // Your service should return a string URL
       const url = await uploadToCloudinary(localUri);
 
       if (!url || typeof url !== "string") {
@@ -148,14 +154,13 @@ export default function EditProfile() {
 
       await updateUserProfile(user.uid, {
         name: name.trim(),
-        // email is normally from auth; keep as read-only in edit UI
         phone: phone.trim(),
         address: address.trim(),
         photoUrl: photoUrl.trim(),
       });
 
       Alert.alert("Saved", "Profile updated successfully.");
-      router.back(); // Profile should show updated data if it reloads on focus
+      router.back();
     } catch (e: any) {
       Alert.alert("Error", e?.message ?? "Failed to save profile");
     } finally {
@@ -165,140 +170,222 @@ export default function EditProfile() {
 
   if (loading) {
     return (
-      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
-        <ActivityIndicator size="large" />
-        <Text style={{ marginTop: 10, color: "#6B7280" }}>Loading profile...</Text>
-      </View>
+      <SafeAreaView style={styles.safe}>
+        <View style={[styles.container, styles.loadingWrap]}>
+          <ActivityIndicator size="large" />
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      {/* HEADER */}
-      <Text style={styles.header}>Edit Profile</Text>
+    <SafeAreaView style={styles.safe}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* HEADER */}
+        <Text style={styles.header}>Edit Profile</Text>
 
-      {/* PROFILE PHOTO */}
-      <View style={styles.photoContainer}>
-        <Image
-          source={{
-            uri: photoUrl || "https://i.pravatar.cc/150?img=47",
-          }}
-          style={styles.avatar}
-        />
+        {/* PROFILE PHOTO */}
+        <View style={styles.photoContainer}>
+          {photoUrl ? (
+            <Image source={{ uri: photoUrl }} style={styles.avatar} />
+          ) : (
+            <View style={styles.avatarPlaceholder}>
+              <Text style={styles.noPhotoText}>No Profile Photo</Text>
+            </View>
+          )}
 
-        <View style={styles.photoActions}>
-          <TouchableOpacity onPress={pickFromGallery} style={styles.photoBtn} disabled={uploading}>
-            <Text style={styles.photoBtnText}>{uploading ? "Uploading..." : "Gallery"}</Text>
+          <View style={styles.photoActions}>
+            <TouchableOpacity
+              onPress={pickFromGallery}
+              style={styles.photoBtn}
+              disabled={uploading}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.photoBtnText}>
+                {uploading ? "Uploading..." : "Gallery"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={takePhoto}
+              style={styles.photoBtn}
+              disabled={uploading}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.photoBtnText}>
+                {uploading ? "Uploading..." : "Camera"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* FORM */}
+        <View style={styles.card}>
+          <Text style={styles.label}>Name</Text>
+          <TextInput
+            placeholder="Enter your name"
+            style={styles.input}
+            value={name}
+            onChangeText={setName}
+          />
+
+          <Text style={styles.label}>Profile Email</Text>
+          <TextInput
+            placeholder="Enter profile email"
+            style={[styles.input, styles.disabledInput]}
+            keyboardType="email-address"
+            value={profileEmail}
+            editable={false}
+          />
+
+          <Text style={styles.label}>Phone Number</Text>
+          <TextInput
+            placeholder="Enter phone number"
+            style={styles.input}
+            keyboardType="phone-pad"
+            value={phone}
+            onChangeText={setPhone}
+          />
+
+          <Text style={styles.label}>Address</Text>
+          <TextInput
+            placeholder="Enter address"
+            style={[styles.input, styles.textArea]}
+            multiline
+            value={address}
+            onChangeText={setAddress}
+          />
+        </View>
+
+        {/* ACTION BUTTONS */}
+        <View style={styles.actions}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.cancelBtn}
+            disabled={saving}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={takePhoto} style={styles.photoBtn} disabled={uploading}>
-            <Text style={styles.photoBtnText}>{uploading ? "Uploading..." : "Camera"}</Text>
+          <TouchableOpacity
+            style={styles.saveBtn}
+            onPress={onSave}
+            disabled={saving || uploading}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.saveText}>{saving ? "Saving..." : "Save"}</Text>
           </TouchableOpacity>
         </View>
-      </View>
-
-      {/* FORM */}
-      <View style={styles.card}>
-        <Text style={styles.label}>Name</Text>
-        <TextInput
-          placeholder="Enter your name"
-          style={styles.input}
-          value={name}
-          onChangeText={setName}
-        />
-
-        <Text style={styles.label}>Profile Email</Text>
-        <TextInput
-          placeholder="Enter profile email"
-          style={[styles.input, styles.disabledInput]}
-          keyboardType="email-address"
-          value={profileEmail}
-          editable={false}
-        />
-
-        <Text style={styles.label}>Phone Number</Text>
-        <TextInput
-          placeholder="Enter phone number"
-          style={styles.input}
-          keyboardType="phone-pad"
-          value={phone}
-          onChangeText={setPhone}
-        />
-
-        <Text style={styles.label}>Address</Text>
-        <TextInput
-          placeholder="Enter address"
-          style={[styles.input, styles.textArea]}
-          multiline
-          value={address}
-          onChangeText={setAddress}
-        />
-      </View>
-
-      {/* ACTION BUTTONS */}
-      <View style={styles.actions}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.cancelBtn} disabled={saving}>
-          <Text style={styles.cancelText}>Cancel</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.saveBtn}
-          onPress={onSave}
-          disabled={saving || uploading}
-        >
-          <Text style={styles.saveText}>{saving ? "Saving..." : "Save"}</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: "#F9FAFB",
+    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
+  },
+
   container: {
     flex: 1,
     backgroundColor: "#F9FAFB",
-    padding: 16,
+    paddingHorizontal: 16,
   },
+
+  content: {
+    paddingBottom: 22,
+  },
+
+  loadingWrap: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 10,
+    color: "#6B7280",
+  },
+
   header: {
     fontSize: 22,
     fontWeight: "bold",
-    marginBottom: 20,
+    marginBottom: 16,
   },
+
   photoContainer: {
     alignItems: "center",
-    marginBottom: 24,
+    marginBottom: 18,
   },
+
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginBottom: 10,
+    width: 194,
+    height: 194,
+    borderRadius: 100,
+    marginBottom: 32,
   },
+
+  avatarPlaceholder: {
+    width: 194,
+    height: 194,
+    borderRadius: 100,
+    backgroundColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 32,
+    paddingHorizontal: 10,
+  },
+  noPhotoText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6B7280",
+    textAlign: "center",
+  },
+  tapToAddText: {
+    fontSize: 10,
+    color: "#9CA3AF",
+    marginTop: 4,
+    textAlign: "center",
+  },
+
   photoActions: {
     flexDirection: "row",
     gap: 10,
   },
+
   photoBtn: {
     backgroundColor: "#F59E0B",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
     borderRadius: 8,
-    minWidth: 90,
+    minWidth: 116,
     alignItems: "center",
   },
+
   photoBtnText: {
     color: "#fff",
-    fontWeight: "600",
+    fontWeight: "700",
   },
+
   card: {
     backgroundColor: "#fff",
     borderRadius: 12,
     padding: 16,
   },
+
   label: {
-    fontWeight: "600",
+    fontWeight: "700",
     marginBottom: 6,
+    color: "#111827",
   },
+
   input: {
     borderWidth: 1,
     borderColor: "#F59E0B",
@@ -307,20 +394,24 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     backgroundColor: "#fff",
   },
+
   disabledInput: {
     borderColor: "#E5E7EB",
     color: "#6B7280",
     backgroundColor: "#F3F4F6",
   },
+
   textArea: {
-    height: 80,
+    height: 82,
     textAlignVertical: "top",
   },
+
   actions: {
     flexDirection: "row",
-    marginTop: 20,
+    marginTop: 18,
     gap: 12,
   },
+
   cancelBtn: {
     flex: 1,
     backgroundColor: "#E5E7EB",
@@ -328,9 +419,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
   },
+
   cancelText: {
-    fontWeight: "600",
+    fontWeight: "700",
+    color: "#111827",
   },
+
   saveBtn: {
     flex: 1,
     backgroundColor: "#F59E0B",
@@ -338,8 +432,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
   },
+
   saveText: {
     color: "#fff",
-    fontWeight: "600",
+    fontWeight: "700",
   },
 });
