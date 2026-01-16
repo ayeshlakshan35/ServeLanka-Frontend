@@ -31,22 +31,22 @@ import {
 export default function ProviderVerification() {
   const router = useRouter();
 
-  // URLs
+  // Local-only state (NOT saved to DB until submit)
   const [idFrontUrl, setIdFrontUrl] = useState<string | null>(null);
   const [idBackUrl, setIdBackUrl] = useState<string | null>(null);
   const [certificateUrl, setCertificateUrl] = useState<string | null>(null);
 
-  // Phone
   const [phone, setPhone] = useState("");
   const [phoneVerified, setPhoneVerified] = useState(false);
 
-  // Loading
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<null | "front" | "back" | "certificate">(null);
   const [submitting, setSubmitting] = useState(false);
 
   const canSubmit = !!(idFrontUrl && idBackUrl && phoneVerified);
 
+  // ✅ Only check auth + already-verified status.
+  // ❌ Do NOT prefill saved progress (you requested empty when re-entering).
   useEffect(() => {
     const load = async () => {
       const uid = auth.currentUser?.uid;
@@ -70,16 +70,12 @@ export default function ProviderVerification() {
           return;
         }
 
-        const v = userDoc.verification;
-
-        setIdFrontUrl(v?.nationalId?.frontUrl ?? null);
-        setIdBackUrl(v?.nationalId?.backUrl ?? null);
-
-        setPhone(v?.phone?.number ?? "");
-        setPhoneVerified(!!v?.phone?.verified);
-
-        const anyCertUrl = (userDoc as any)?.verification?.certificateUrl ?? null;
-        setCertificateUrl(anyCertUrl);
+        // Always start fresh (nothing loaded from DB)
+        setIdFrontUrl(null);
+        setIdBackUrl(null);
+        setCertificateUrl(null);
+        setPhone("");
+        setPhoneVerified(false);
       } catch (e: any) {
         Alert.alert("Error", e?.message ?? "Failed to load verification");
       } finally {
@@ -100,20 +96,20 @@ export default function ProviderVerification() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
-      quality: 0.8,
+      quality: 0.85,
+      aspect: [4, 3],
     });
 
     if (result.canceled) return null;
     return result.assets[0].uri;
   };
 
-  const uploadAndSave = async (type: "front" | "back" | "certificate") => {
+  // ✅ Upload to Cloudinary only (local state). No DB writes here.
+  const uploadLocal = async (type: "front" | "back" | "certificate") => {
     try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) {
-        Alert.alert("Error", "You are not logged in");
-        return;
-      }
+      // Block front/back upload if already exists (one per slot)
+      if (type === "front" && idFrontUrl) return;
+      if (type === "back" && idBackUrl) return;
 
       const uri = await pickImage();
       if (!uri) return;
@@ -122,26 +118,11 @@ export default function ProviderVerification() {
 
       const url = await uploadToCloudinary(uri);
 
-      if (type === "front") {
-        await updateVerification(uid, {
-          nationalId: { frontUploaded: true, frontUrl: url },
-        });
-        setIdFrontUrl(url);
-      }
+      if (type === "front") setIdFrontUrl(url);
+      if (type === "back") setIdBackUrl(url);
 
-      if (type === "back") {
-        await updateVerification(uid, {
-          nationalId: { backUploaded: true, backUrl: url },
-        });
-        setIdBackUrl(url);
-      }
-
-      if (type === "certificate") {
-        await updateVerification(uid, { certificatesUploaded: true });
-        setCertificateUrl(url);
-      }
-
-      Alert.alert("Success", "Upload completed!");
+      // Certificate can be replaced unlimited times
+      if (type === "certificate") setCertificateUrl(url);
     } catch (e: any) {
       console.log("Upload error:", e);
       Alert.alert("Upload failed", e?.message || "Something went wrong");
@@ -150,26 +131,22 @@ export default function ProviderVerification() {
     }
   };
 
-  const handleVerifyPhone = async () => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
+  const removeLocal = (type: "front" | "back" | "certificate") => {
+    if (type === "front") setIdFrontUrl(null);
+    if (type === "back") setIdBackUrl(null);
+    if (type === "certificate") setCertificateUrl(null);
+  };
 
+  // ✅ Local "verify" only (no DB write until submit)
+  const handleVerifyPhone = async () => {
     if (!phone.trim()) {
       Alert.alert("Validation", "Please enter a phone number.");
       return;
     }
-
-    try {
-      await updateVerification(uid, {
-        phone: { number: phone.trim(), verified: true },
-      });
-      setPhoneVerified(true);
-      Alert.alert("Verified", "Phone marked as verified (OTP can be added later).");
-    } catch (e: any) {
-      Alert.alert("Error", e?.message || "Failed to verify phone");
-    }
+    setPhoneVerified(true);
   };
 
+  // ✅ Save everything ONLY here
   const handleSubmit = async () => {
     try {
       const uid = auth.currentUser?.uid;
@@ -182,15 +159,27 @@ export default function ProviderVerification() {
 
       setSubmitting(true);
 
+      // 1) Save all verification info to DB now (single write path)
       await updateVerification(uid, {
-        phone: { number: phone.trim(), verified: true },
+        nationalId: {
+          frontUploaded: true,
+          frontUrl: idFrontUrl,
+          backUploaded: true,
+          backUrl: idBackUrl,
+        },
+        phone: {
+          number: phone.trim(),
+          verified: true,
+        },
+        certificatesUploaded: !!certificateUrl,
       });
 
+      // 2) Submit + approve (your current flow)
       await submitVerification(uid);
       await approveProviderVerification(uid);
 
       Alert.alert("Success", "Verification successful! Your provider account is now active.");
-      router.back(); // ✅ back to previous screen
+      router.back();
     } catch (e: any) {
       Alert.alert("Error", e?.message || "Failed to submit verification");
     } finally {
@@ -201,9 +190,9 @@ export default function ProviderVerification() {
   if (loading) {
     return (
       <SafeAreaView style={styles.safe}>
-        <View style={[styles.loadingWrap]}>
+        <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" />
-          <Text style={{ marginTop: 10, color: "#6B7280" }}>Loading verification...</Text>
+          <Text style={styles.loadingText}>Loading verification...</Text>
         </View>
       </SafeAreaView>
     );
@@ -218,13 +207,12 @@ export default function ProviderVerification() {
       >
         {/* HEADER */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.9}>
             <Ionicons name="arrow-back" size={22} color="#111827" />
           </TouchableOpacity>
 
           <Text style={styles.headerTitle}>Provider Verification</Text>
 
-          {/* spacer for perfect center */}
           <View style={{ width: 34 }} />
         </View>
 
@@ -232,48 +220,92 @@ export default function ProviderVerification() {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>National ID Upload (Required)</Text>
-            <Text style={styles.statusText}>{idFrontUrl && idBackUrl ? "Completed" : "Pending"}</Text>
+            <Text style={styles.statusText}>
+              {idFrontUrl && idBackUrl ? "Completed" : "Pending"}
+            </Text>
           </View>
 
           <Text style={styles.desc}>
             Upload clear photos of both sides of your National ID.
           </Text>
 
-          <TouchableOpacity
-            style={styles.uploadBox}
-            onPress={() => uploadAndSave("front")}
-            disabled={uploading !== null || submitting}
-            activeOpacity={0.9}
-          >
-            {uploading === "front" ? (
-              <ActivityIndicator />
-            ) : (
-              <Ionicons name="cloud-upload-outline" size={30} color="#111827" />
-            )}
-            <Text style={styles.uploadText}>
-              {idFrontUrl ? "Front Uploaded ✅" : "Upload ID – Front Side"}
-            </Text>
-          </TouchableOpacity>
+          {/* FRONT SLOT */}
+          <View style={styles.slotWrap}>
+            <TouchableOpacity
+              style={[styles.uploadSlot, idFrontUrl && styles.uploadSlotFilled]}
+              onPress={() => uploadLocal("front")}
+              disabled={!!idFrontUrl || uploading !== null || submitting}
+              activeOpacity={0.9}
+            >
+              {idFrontUrl ? (
+                <>
+                  <Image source={{ uri: idFrontUrl }} style={styles.slotImage} />
+                  <View style={styles.slotLabelRow}>
+                    <Ionicons name="checkmark-circle" size={18} color="#16A34A" />
+                    <Text style={styles.slotLabel}>Front Uploaded</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  {uploading === "front" ? (
+                    <ActivityIndicator />
+                  ) : (
+                    <Ionicons name="cloud-upload-outline" size={30} color="#111827" />
+                  )}
+                  <Text style={styles.uploadText}>Upload ID – Front Side</Text>
+                </>
+              )}
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.uploadBox}
-            onPress={() => uploadAndSave("back")}
-            disabled={uploading !== null || submitting}
-            activeOpacity={0.9}
-          >
-            {uploading === "back" ? (
-              <ActivityIndicator />
-            ) : (
-              <Ionicons name="cloud-upload-outline" size={30} color="#111827" />
+            {idFrontUrl && (
+              <TouchableOpacity
+                style={styles.removeBtn}
+                onPress={() => removeLocal("front")}
+                activeOpacity={0.9}
+              >
+                <Ionicons name="trash-outline" size={18} color="#EF4444" />
+              </TouchableOpacity>
             )}
-            <Text style={styles.uploadText}>
-              {idBackUrl ? "Back Uploaded ✅" : "Upload ID – Back Side"}
-            </Text>
-          </TouchableOpacity>
+          </View>
 
-          {/* previews are optional, keep your feature */}
-          {idFrontUrl && <Image source={{ uri: idFrontUrl }} style={styles.preview} />}
-          {idBackUrl && <Image source={{ uri: idBackUrl }} style={styles.preview} />}
+          {/* BACK SLOT */}
+          <View style={styles.slotWrap}>
+            <TouchableOpacity
+              style={[styles.uploadSlot, idBackUrl && styles.uploadSlotFilled]}
+              onPress={() => uploadLocal("back")}
+              disabled={!!idBackUrl || uploading !== null || submitting}
+              activeOpacity={0.9}
+            >
+              {idBackUrl ? (
+                <>
+                  <Image source={{ uri: idBackUrl }} style={styles.slotImage} />
+                  <View style={styles.slotLabelRow}>
+                    <Ionicons name="checkmark-circle" size={18} color="#16A34A" />
+                    <Text style={styles.slotLabel}>Back Uploaded</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  {uploading === "back" ? (
+                    <ActivityIndicator />
+                  ) : (
+                    <Ionicons name="cloud-upload-outline" size={30} color="#111827" />
+                  )}
+                  <Text style={styles.uploadText}>Upload ID – Back Side</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {idBackUrl && (
+              <TouchableOpacity
+                style={styles.removeBtn}
+                onPress={() => removeLocal("back")}
+                activeOpacity={0.9}
+              >
+                <Ionicons name="trash-outline" size={18} color="#EF4444" />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* PHONE */}
@@ -300,8 +332,8 @@ export default function ProviderVerification() {
             />
 
             <TouchableOpacity
-              style={[styles.verifyBtn, !phone.trim() && styles.btnDisabled]}
-              disabled={!phone.trim() || submitting}
+              style={[styles.verifyBtn, (!phone.trim() || phoneVerified) && styles.btnDisabled]}
+              disabled={!phone.trim() || phoneVerified || submitting}
               onPress={handleVerifyPhone}
               activeOpacity={0.9}
             >
@@ -321,31 +353,49 @@ export default function ProviderVerification() {
             Upload certificates, licenses, or portfolio (if any).
           </Text>
 
-          <TouchableOpacity
-            style={styles.uploadBox}
-            onPress={() => uploadAndSave("certificate")}
-            disabled={uploading !== null || submitting}
-            activeOpacity={0.9}
-          >
-            {uploading === "certificate" ? (
-              <ActivityIndicator />
-            ) : (
-              <Ionicons name="cloud-upload-outline" size={30} color="#111827" />
-            )}
-            <Text style={styles.uploadText}>
-              {certificateUrl ? "Certificate Uploaded ✅" : "Upload Certificate"}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.slotWrap}>
+            <TouchableOpacity
+              style={[styles.uploadSlot, certificateUrl && styles.uploadSlotFilled]}
+              onPress={() => uploadLocal("certificate")}
+              disabled={uploading !== null || submitting}
+              activeOpacity={0.9}
+            >
+              {certificateUrl ? (
+                <>
+                  <Image source={{ uri: certificateUrl }} style={styles.slotImage} />
+                  <View style={styles.slotLabelRow}>
+                    <Ionicons name="checkmark-circle" size={18} color="#16A34A" />
+                    <Text style={styles.slotLabel}>Certificate Uploaded</Text>
+                  </View>
+                  <Text style={styles.changeHint}>Tap to change</Text>
+                </>
+              ) : (
+                <>
+                  {uploading === "certificate" ? (
+                    <ActivityIndicator />
+                  ) : (
+                    <Ionicons name="cloud-upload-outline" size={30} color="#111827" />
+                  )}
+                  <Text style={styles.uploadText}>Upload Certificate</Text>
+                </>
+              )}
+            </TouchableOpacity>
 
-          {certificateUrl && <Image source={{ uri: certificateUrl }} style={styles.preview} />}
+            {certificateUrl && (
+              <TouchableOpacity
+                style={styles.removeBtn}
+                onPress={() => removeLocal("certificate")}
+                activeOpacity={0.9}
+              >
+                <Ionicons name="trash-outline" size={18} color="#EF4444" />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* SUBMIT */}
         <TouchableOpacity
-          style={[
-            styles.submitBtn,
-            (!canSubmit || submitting) && styles.btnDisabled,
-          ]}
+          style={[styles.submitBtn, (!canSubmit || submitting) && styles.btnDisabled]}
           disabled={!canSubmit || submitting}
           onPress={handleSubmit}
           activeOpacity={0.9}
@@ -365,25 +415,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
     paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
   },
-  container: {
-    flex: 1,
-    backgroundColor: "#F3F4F6",
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 28,
-  },
-  loadingWrap: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  container: { flex: 1, backgroundColor: "#F3F4F6" },
+  content: { padding: 16, paddingBottom: 28 },
 
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 14,
-  },
+  loadingWrap: { flex: 1, justifyContent: "center", alignItems: "center" },
+  loadingText: { marginTop: 10, color: "#6B7280" },
+
+  header: { flexDirection: "row", alignItems: "center", marginBottom: 14 },
   backBtn: {
     width: 34,
     height: 34,
@@ -410,29 +448,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#EEF2F7",
   },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  cardTitle: {
-    fontWeight: "800",
-    fontSize: 14.5,
-    color: "#111827",
-  },
-  statusText: {
-    fontSize: 12,
-    color: "#9CA3AF",
-    fontWeight: "700",
-  },
-  desc: {
-    color: "#6B7280",
-    marginTop: 6,
-    marginBottom: 10,
-    lineHeight: 18,
-  },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  cardTitle: { fontWeight: "800", fontSize: 14.5, color: "#111827" },
+  statusText: { fontSize: 12, color: "#9CA3AF", fontWeight: "700" },
+  desc: { color: "#6B7280", marginTop: 6, marginBottom: 10, lineHeight: 18 },
 
-  uploadBox: {
+  slotWrap: { position: "relative", marginTop: 10 },
+
+  uploadSlot: {
     borderWidth: 1,
     borderStyle: "dashed",
     borderColor: "#D1D5DB",
@@ -441,27 +464,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 10,
     backgroundColor: "#FFFFFF",
+    overflow: "hidden",
+    minHeight: 140,
   },
-  uploadText: {
-    marginTop: 8,
-    fontWeight: "800",
-    color: "#111827",
+  uploadSlotFilled: {
+    borderStyle: "solid",
+    borderColor: "#E5E7EB",
+    paddingVertical: 10,
   },
+  uploadText: { marginTop: 8, fontWeight: "800", color: "#111827" },
 
-  preview: {
+  slotImage: {
     width: "100%",
-    height: 160,
-    borderRadius: 12,
-    marginTop: 12,
+    height: 110,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  slotLabelRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  slotLabel: { fontWeight: "800", color: "#111827" },
+  changeHint: { marginTop: 6, color: "#6B7280", fontSize: 12, fontWeight: "700" },
+
+  removeBtn: {
+    position: "absolute",
+    right: 10,
+    top: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
-  phoneRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
+  phoneRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   phoneInput: {
     flex: 1,
     borderWidth: 1,
@@ -479,10 +517,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  verifyBtnText: {
-    fontWeight: "800",
-    color: "#111827",
-  },
+  verifyBtnText: { fontWeight: "800", color: "#111827" },
 
   submitBtn: {
     backgroundColor: "#F59E0B",
@@ -490,14 +525,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     marginTop: 6,
   },
-  submitText: {
-    color: "#fff",
-    textAlign: "center",
-    fontWeight: "900",
-    fontSize: 16,
-  },
+  submitText: { color: "#fff", textAlign: "center", fontWeight: "900", fontSize: 16 },
 
-  btnDisabled: {
-    opacity: 0.5,
-  },
+  btnDisabled: { opacity: 0.5 },
 });
