@@ -1,5 +1,4 @@
-// app/verify/index.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -45,46 +44,59 @@ export default function ProviderVerification() {
 
   const canSubmit = !!(idFrontUrl && idBackUrl && phoneVerified);
 
+  // ✅ performance: prevent spinner + extra firestore calls on every focus
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+
   // ✅ Only check auth + already-verified status.
   // ❌ Do NOT prefill saved progress (you requested empty when re-entering).
-  useEffect(() => {
-    const load = async () => {
-      const uid = auth.currentUser?.uid;
-      if (!uid) {
-        Alert.alert("Error", "You are not logged in");
+  const load = useCallback(async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      Alert.alert("Error", "You are not logged in");
+      router.back();
+      return;
+    }
+
+    try {
+      // ✅ Only show spinner first time (avoid delay feeling)
+      if (!hasLoadedOnce) setLoading(true);
+
+      // ✅ Fast path: read doc first
+      let userDoc = await getUserProfile(uid);
+
+      // ✅ If missing, create once then read again
+      if (!userDoc) {
+        await ensureUserProfile(uid, { email: auth.currentUser?.email ?? "" });
+        userDoc = await getUserProfile(uid);
+      }
+
+      if (!userDoc) return;
+
+      // ✅ Already verified → just go back (NO alert)
+      if (userDoc.verification?.status === "approved" || userDoc.isVerified) {
         router.back();
         return;
       }
 
-      try {
-        setLoading(true);
+      // Always start fresh (nothing loaded from DB)
+      setIdFrontUrl(null);
+      setIdBackUrl(null);
+      setCertificateUrl(null);
+      setPhone("");
+      setPhoneVerified(false);
 
-        await ensureUserProfile(uid, { email: auth.currentUser?.email ?? "" });
+      setHasLoadedOnce(true);
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "Failed to load verification");
+    } finally {
+      if (!hasLoadedOnce) setLoading(false);
+    }
+  }, [router, hasLoadedOnce]);
 
-        const userDoc = await getUserProfile(uid);
-        if (!userDoc) return;
-
-        if (userDoc.verification?.status === "approved" || userDoc.isVerified) {
-          Alert.alert("Already Verified", "Your account is already verified as a provider.");
-          router.back();
-          return;
-        }
-
-        // Always start fresh (nothing loaded from DB)
-        setIdFrontUrl(null);
-        setIdBackUrl(null);
-        setCertificateUrl(null);
-        setPhone("");
-        setPhoneVerified(false);
-      } catch (e: any) {
-        Alert.alert("Error", e?.message ?? "Failed to load verification");
-      } finally {
-        setLoading(false);
-      }
-    };
-
+  useEffect(() => {
     load();
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pickImage = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -524,6 +536,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 14,
     marginTop: 6,
+    marginBottom: 20,
   },
   submitText: { color: "#fff", textAlign: "center", fontWeight: "900", fontSize: 16 },
 

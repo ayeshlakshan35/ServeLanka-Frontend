@@ -1,5 +1,5 @@
 // app/profile/edit.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,11 @@ import {
   SafeAreaView,
   Platform,
   StatusBar,
+  KeyboardAvoidingView,
+  findNodeHandle,
+  Keyboard,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from "react-native";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
@@ -28,6 +33,75 @@ import {
 export default function EditProfile() {
   const router = useRouter();
 
+  // ✅ scroll helpers
+  const scrollRef = useRef<ScrollView>(null);
+  const phoneRef = useRef<TextInput>(null);
+  const addressRef = useRef<TextInput>(null);
+
+  // ✅ Track scroll position so we can restore after keyboard closes
+  const currentScrollYRef = useRef(0);
+  const restoreScrollYRef = useRef<number | null>(null);
+  const isAutoScrollingRef = useRef(false);
+
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    // Keep tracking scroll position
+    currentScrollYRef.current = e.nativeEvent.contentOffset.y;
+  };
+
+  // ✅ FIX: no measureLayout (prevents your error + works with new architecture)
+  const scrollToField = (inputRef: React.RefObject<TextInput | null>) => {
+    // Save position BEFORE we auto-scroll
+    if (restoreScrollYRef.current === null) {
+      restoreScrollYRef.current = currentScrollYRef.current;
+    }
+
+    setTimeout(() => {
+      const scroll = scrollRef.current;
+      const input = inputRef.current;
+      if (!scroll || !input) return;
+
+      const node = findNodeHandle(input);
+      if (!node) return;
+
+      isAutoScrollingRef.current = true;
+
+      // Scroll so input stays visible above keyboard
+      scroll
+        .getScrollResponder()
+        ?.scrollResponderScrollNativeHandleToKeyboard(node, 110, true);
+
+      // Mark done shortly after
+      setTimeout(() => {
+        isAutoScrollingRef.current = false;
+      }, 250);
+    }, 80);
+  };
+
+  // ✅ When keyboard closes, return to previous scroll position
+  useEffect(() => {
+    const restore = () => {
+      const scroll = scrollRef.current;
+      const y = restoreScrollYRef.current;
+
+      if (!scroll || y === null) return;
+
+      // Restore smoothly
+      setTimeout(() => {
+        scroll.scrollTo({ y, animated: true });
+        restoreScrollYRef.current = null;
+      }, 50);
+    };
+
+    const subHide = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      restore
+    );
+
+    return () => {
+      subHide.remove();
+    };
+  }, []);
+
   // We store the REAL image URL (Cloudinary) here
   const [photoUrl, setPhotoUrl] = useState<string>("");
 
@@ -40,44 +114,48 @@ export default function EditProfile() {
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // ✅ Load & prefill existing saved data when screen opens
-  useEffect(() => {
-    const load = async () => {
-      const user = auth.currentUser;
-      if (!user) {
-        Alert.alert("Error", "No logged-in user found.");
-        router.back();
-        return;
-      }
+  // ✅ performance: spinner only first load
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
-      try {
-        setLoading(true);
+  const loadProfile = useCallback(async () => {
+    const user = auth.currentUser;
+    if (!user) {
+      Alert.alert("Error", "No logged-in user found.");
+      router.back();
+      return;
+    }
 
-        // Ensure user doc exists (if missing, create default doc)
+    try {
+      if (!hasLoadedOnce) setLoading(true);
+
+      let doc = await getUserProfile(user.uid);
+
+      if (!doc) {
         await ensureUserProfile(user.uid, {
           name: "",
           email: user.email ?? "",
         });
-
-        const doc = await getUserProfile(user.uid);
-
-        // Prefill fields
-        setName(doc?.name ?? "");
-        setProfileEmail(doc?.email || user.email || "");
-        setPhone(doc?.phone ?? "");
-        setAddress(doc?.address ?? "");
-        setPhotoUrl(doc?.photoUrl ?? "");
-      } catch (e: any) {
-        Alert.alert("Error", e?.message ?? "Failed to load profile");
-      } finally {
-        setLoading(false);
+        doc = await getUserProfile(user.uid);
       }
-    };
 
-    load();
-  }, [router]);
+      setName(doc?.name ?? "");
+      setProfileEmail(doc?.email || user.email || "");
+      setPhone(doc?.phone ?? "");
+      setAddress(doc?.address ?? "");
+      setPhotoUrl(doc?.photoUrl ?? "");
 
-  // ✅ Upload picked image to Cloudinary and set the URL
+      setHasLoadedOnce(true);
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "Failed to load profile");
+    } finally {
+      if (!hasLoadedOnce) setLoading(false);
+    }
+  }, [router, hasLoadedOnce]);
+
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
+
   const uploadAndSetPhoto = async (localUri: string) => {
     try {
       setUploading(true);
@@ -97,7 +175,6 @@ export default function EditProfile() {
     }
   };
 
-  // Pick image from gallery
   const pickFromGallery = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
@@ -117,7 +194,6 @@ export default function EditProfile() {
     }
   };
 
-  // Take photo using camera
   const takePhoto = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
@@ -136,7 +212,6 @@ export default function EditProfile() {
     }
   };
 
-  // ✅ Save updated data to Firestore then go back
   const onSave = async () => {
     const user = auth.currentUser;
     if (!user) {
@@ -181,109 +256,126 @@ export default function EditProfile() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
       >
-        {/* HEADER */}
-        <Text style={styles.header}>Edit Profile</Text>
+        <ScrollView
+          ref={scrollRef}
+          style={styles.container}
+          contentContainerStyle={[styles.content]} // ✅ keep
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+        >
+          {/* HEADER */}
+          <Text style={styles.header}>Edit Profile</Text>
 
-        {/* PROFILE PHOTO */}
-        <View style={styles.photoContainer}>
-          {photoUrl ? (
-            <Image source={{ uri: photoUrl }} style={styles.avatar} />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.noPhotoText}>No Profile Photo</Text>
+          {/* PROFILE PHOTO */}
+          <View style={styles.photoContainer}>
+            {photoUrl ? (
+              <Image source={{ uri: photoUrl }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Text style={styles.noPhotoText}>No Profile Photo</Text>
+              </View>
+            )}
+
+            <View style={styles.photoActions}>
+              <TouchableOpacity
+                onPress={pickFromGallery}
+                style={styles.photoBtn}
+                disabled={uploading}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.photoBtnText}>
+                  {uploading ? "Uploading..." : "Gallery"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={takePhoto}
+                style={styles.photoBtn}
+                disabled={uploading}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.photoBtnText}>
+                  {uploading ? "Uploading..." : "Camera"}
+                </Text>
+              </TouchableOpacity>
             </View>
-          )}
+          </View>
 
-          <View style={styles.photoActions}>
+          {/* FORM */}
+          <View style={styles.card}>
+            <Text style={styles.label}>Name</Text>
+            <TextInput
+              placeholder="Enter your name"
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+            />
+
+            <Text style={styles.label}>Profile Email</Text>
+            <TextInput
+              placeholder="Enter profile email"
+              style={[styles.input, styles.disabledInput]}
+              keyboardType="email-address"
+              value={profileEmail}
+              editable={false}
+            />
+
+            <Text style={styles.label}>Phone Number</Text>
+            <TextInput
+              ref={phoneRef}
+              placeholder="Enter phone number"
+              style={styles.input}
+              keyboardType="phone-pad"
+              value={phone}
+              onChangeText={setPhone}
+              onFocus={() => scrollToField(phoneRef)}
+            />
+
+            <Text style={styles.label}>Address</Text>
+            <TextInput
+              ref={addressRef}
+              placeholder="Enter address"
+              style={[styles.input, styles.textArea]}
+              multiline
+              value={address}
+              onChangeText={setAddress}
+              onFocus={() => scrollToField(addressRef)}
+            />
+          </View>
+
+          {/* ACTION BUTTONS */}
+          <View style={styles.actions}>
             <TouchableOpacity
-              onPress={pickFromGallery}
-              style={styles.photoBtn}
-              disabled={uploading}
+              onPress={() => router.back()}
+              style={styles.cancelBtn}
+              disabled={saving}
               activeOpacity={0.9}
             >
-              <Text style={styles.photoBtnText}>
-                {uploading ? "Uploading..." : "Gallery"}
-              </Text>
+              <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={takePhoto}
-              style={styles.photoBtn}
-              disabled={uploading}
+              style={styles.saveBtn}
+              onPress={onSave}
+              disabled={saving || uploading}
               activeOpacity={0.9}
             >
-              <Text style={styles.photoBtnText}>
-                {uploading ? "Uploading..." : "Camera"}
-              </Text>
+              <Text style={styles.saveText}>{saving ? "Saving..." : "Save"}</Text>
             </TouchableOpacity>
           </View>
-        </View>
 
-        {/* FORM */}
-        <View style={styles.card}>
-          <Text style={styles.label}>Name</Text>
-          <TextInput
-            placeholder="Enter your name"
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-          />
-
-          <Text style={styles.label}>Profile Email</Text>
-          <TextInput
-            placeholder="Enter profile email"
-            style={[styles.input, styles.disabledInput]}
-            keyboardType="email-address"
-            value={profileEmail}
-            editable={false}
-          />
-
-          <Text style={styles.label}>Phone Number</Text>
-          <TextInput
-            placeholder="Enter phone number"
-            style={styles.input}
-            keyboardType="phone-pad"
-            value={phone}
-            onChangeText={setPhone}
-          />
-
-          <Text style={styles.label}>Address</Text>
-          <TextInput
-            placeholder="Enter address"
-            style={[styles.input, styles.textArea]}
-            multiline
-            value={address}
-            onChangeText={setAddress}
-          />
-        </View>
-
-        {/* ACTION BUTTONS */}
-        <View style={styles.actions}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.cancelBtn}
-            disabled={saving}
-            activeOpacity={0.9}
-          >
-            <Text style={styles.cancelText}>Cancel</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.saveBtn}
-            onPress={onSave}
-            disabled={saving || uploading}
-            activeOpacity={0.9}
-          >
-            <Text style={styles.saveText}>{saving ? "Saving..." : "Save"}</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+          {/* extra space so last fields stay visible */}
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -326,15 +418,15 @@ const styles = StyleSheet.create({
   },
 
   avatar: {
-    width: 194,
-    height: 194,
+    width: 154,
+    height: 154,
     borderRadius: 100,
     marginBottom: 32,
   },
 
   avatarPlaceholder: {
-    width: 194,
-    height: 194,
+    width: 174,
+    height: 174,
     borderRadius: 100,
     backgroundColor: "#E5E7EB",
     alignItems: "center",
@@ -348,16 +440,11 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     textAlign: "center",
   },
-  tapToAddText: {
-    fontSize: 10,
-    color: "#9CA3AF",
-    marginTop: 4,
-    textAlign: "center",
-  },
 
   photoActions: {
     flexDirection: "row",
     gap: 10,
+    marginTop: -20,
   },
 
   photoBtn: {
@@ -378,6 +465,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 12,
     padding: 16,
+    gap: 0,
   },
 
   label: {
@@ -402,18 +490,20 @@ const styles = StyleSheet.create({
   },
 
   textArea: {
-    height: 82,
+    height: 52,
     textAlignVertical: "top",
   },
 
   actions: {
     flexDirection: "row",
-    marginTop: 18,
+    marginTop: 12,
     gap: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   cancelBtn: {
-    flex: 1,
+    width: 155,
     backgroundColor: "#E5E7EB",
     padding: 14,
     borderRadius: 10,
@@ -426,7 +516,7 @@ const styles = StyleSheet.create({
   },
 
   saveBtn: {
-    flex: 1,
+    width: 155,
     backgroundColor: "#F59E0B",
     padding: 14,
     borderRadius: 10,

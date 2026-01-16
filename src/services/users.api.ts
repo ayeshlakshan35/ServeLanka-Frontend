@@ -12,7 +12,11 @@ import {
 /* ================================
    TYPES (OPTIONAL BUT HELPFUL)
 ================================ */
-export type VerificationStatus = "not_started" | "in_review" | "approved" | "rejected";
+export type VerificationStatus =
+  | "not_started"
+  | "in_review"
+  | "approved"
+  | "rejected";
 
 export type UserDoc = {
   uid: string;
@@ -100,33 +104,37 @@ export const ensureUserProfile = async (uid: string, seed?: Partial<UserDoc>) =>
   if (snap.exists()) return;
 
   // fallback for safety if doc missing
-  await setDoc(userRef, {
-    uid,
-    name: seed?.name ?? "",
-    email: seed?.email ?? "",
-    role: seed?.role ?? "user",
-    isVerified: seed?.isVerified ?? false,
-    phone: seed?.phone ?? "",
-    address: seed?.address ?? "",
-    photoUrl: seed?.photoUrl ?? "",
-    verification: seed?.verification ?? {
-      status: "not_started",
-      nationalId: {
-        frontUploaded: false,
-        backUploaded: false,
-        frontUrl: null,
-        backUrl: null,
+  await setDoc(
+    userRef,
+    {
+      uid,
+      name: seed?.name ?? "",
+      email: seed?.email ?? "",
+      role: seed?.role ?? "user",
+      isVerified: seed?.isVerified ?? false,
+      phone: seed?.phone ?? "",
+      address: seed?.address ?? "",
+      photoUrl: seed?.photoUrl ?? "",
+      verification: seed?.verification ?? {
+        status: "not_started",
+        nationalId: {
+          frontUploaded: false,
+          backUploaded: false,
+          frontUrl: null,
+          backUrl: null,
+        },
+        phone: {
+          number: "",
+          verified: false,
+        },
+        certificatesUploaded: false,
+        submittedAt: null,
       },
-      phone: {
-        number: "",
-        verified: false,
-      },
-      certificatesUploaded: false,
-      submittedAt: null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     },
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
+    { merge: true } // ✅ safe: doesn't change behavior; prevents accidental overwrites if doc exists
+  );
 };
 
 /* ================================
@@ -138,6 +146,32 @@ export const getUserProfile = async (uid: string): Promise<UserDoc | null> => {
 
   if (!snapshot.exists()) return null;
   return snapshot.data() as UserDoc;
+};
+
+/* ================================
+   ✅ FAST HELPER (NEW)
+   Get profile with 1 read normally.
+   If missing, create it and return it.
+   This reduces visible loading delays.
+================================ */
+export const getOrCreateUserProfile = async (
+  uid: string,
+  seed?: Partial<UserDoc>
+): Promise<UserDoc> => {
+  // 1) First try reading (fast path)
+  const existing = await getUserProfile(uid);
+  if (existing) return existing;
+
+  // 2) If missing: create then read again
+  await ensureUserProfile(uid, seed);
+  const created = await getUserProfile(uid);
+
+  // If still null (extremely rare), throw helpful error
+  if (!created) {
+    throw new Error("Failed to create user profile document.");
+  }
+
+  return created;
 };
 
 /* ================================

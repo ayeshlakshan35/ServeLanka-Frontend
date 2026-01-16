@@ -1,22 +1,7 @@
-import {
-  View,
-  Text,
-  ActivityIndicator,
-  TouchableOpacity,
-  Image,
-  StyleSheet,
-  ScrollView,
-  Alert,
-} from "react-native";
+import {View,Text,ActivityIndicator,TouchableOpacity,Image,StyleSheet,ScrollView,Alert,} from "react-native";
 import { useCallback, useState } from "react";
 import { auth } from "../../src/config/firebase";
-import {
-  ensureUserProfile,
-  getUserProfile,
-  updateUserProfile,
-  isProviderApproved,
-  UserDoc,
-} from "../../src/services/users.api";
+import {ensureUserProfile, getUserProfile,updateUserProfile,isProviderApproved,UserDoc,} from "../../src/services/users.api";
 import { signOut } from "firebase/auth";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -517,3 +502,4 @@ const styles = StyleSheet.create({
 
   activityWrap: { backgroundColor: "#fff", borderRadius: 12, padding: 16 },
 });
+
