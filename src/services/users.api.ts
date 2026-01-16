@@ -1,4 +1,3 @@
-// src/services/users.api.ts
 import { db } from "../config/firebase";
 import {
   doc,
@@ -9,9 +8,7 @@ import {
   increment,
 } from "firebase/firestore";
 
-/* ================================
-   TYPES (OPTIONAL BUT HELPFUL)
-================================ */
+/* TYPES AND INTERFACES */
 export type VerificationStatus =
   | "not_started"
   | "in_review"
@@ -23,9 +20,9 @@ export type UserDoc = {
   name: string;
   email: string;
   role: "user" | "provider";
-  isVerified: boolean; // keep for backward compatibility
+  isVerified: boolean; 
 
-  // Profile fields (for edit profile)
+  // Profile fields for edit profile
   phone: string;
   address: string;
   photoUrl: string;
@@ -53,9 +50,7 @@ export type UserDoc = {
   updatedAt?: any;
 };
 
-/* ================================
-   CREATE USER PROFILE
-================================ */
+/* CREATE USER PROFILE */
 export const createUserProfile = async (uid: string, name: string, email: string) => {
   const userRef = doc(db, "users", uid);
 
@@ -66,12 +61,12 @@ export const createUserProfile = async (uid: string, name: string, email: string
     role: "user",
     isVerified: false,
 
-    // ✅ new profile fields
+    // new profile fields
     phone: "",
     address: "",
     photoUrl: "",
 
-    // Provider verification (initial state)
+    // Provider verification object
     verification: {
       status: "not_started",
       nationalId: {
@@ -93,10 +88,6 @@ export const createUserProfile = async (uid: string, name: string, email: string
   });
 };
 
-/* ================================
-   ENSURE USER PROFILE EXISTS
-   (create if missing)
-================================ */
 export const ensureUserProfile = async (uid: string, seed?: Partial<UserDoc>) => {
   const userRef = doc(db, "users", uid);
   const snap = await getDoc(userRef);
@@ -133,13 +124,11 @@ export const ensureUserProfile = async (uid: string, seed?: Partial<UserDoc>) =>
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     },
-    { merge: true } // ✅ safe: doesn't change behavior; prevents accidental overwrites if doc exists
+    { merge: true } 
   );
 };
 
-/* ================================
-   GET USER PROFILE
-================================ */
+/*  GET USER PROFILE */
 export const getUserProfile = async (uid: string): Promise<UserDoc | null> => {
   const userRef = doc(db, "users", uid);
   const snapshot = await getDoc(userRef);
@@ -148,25 +137,19 @@ export const getUserProfile = async (uid: string): Promise<UserDoc | null> => {
   return snapshot.data() as UserDoc;
 };
 
-/* ================================
-   ✅ FAST HELPER (NEW)
-   Get profile with 1 read normally.
-   If missing, create it and return it.
-   This reduces visible loading delays.
-================================ */
+/* Fast get-or-create user profile */
+
 export const getOrCreateUserProfile = async (
   uid: string,
   seed?: Partial<UserDoc>
 ): Promise<UserDoc> => {
-  // 1) First try reading (fast path)
+
   const existing = await getUserProfile(uid);
   if (existing) return existing;
 
-  // 2) If missing: create then read again
   await ensureUserProfile(uid, seed);
   const created = await getUserProfile(uid);
 
-  // If still null (extremely rare), throw helpful error
   if (!created) {
     throw new Error("Failed to create user profile document.");
   }
@@ -174,10 +157,7 @@ export const getOrCreateUserProfile = async (
   return created;
 };
 
-/* ================================
-   UPDATE USER PROFILE (EDIT PAGE)
-   ✅ name, phone, address, photoUrl
-================================ */
+/*   UPDATE USER PROFILE  */
 export const updateUserProfile = async (
   uid: string,
   data: Partial<{
@@ -197,9 +177,7 @@ export const updateUserProfile = async (
   });
 };
 
-/* ================================
-   START PROVIDER VERIFICATION
-================================ */
+/*  START PROVIDER VERIFICATION */
 export const startProviderVerification = async (uid: string) => {
   const userRef = doc(db, "users", uid);
 
@@ -209,10 +187,7 @@ export const startProviderVerification = async (uid: string) => {
   });
 };
 
-/* ================================
-   UPDATE VERIFICATION PROGRESS
-   ✅ FIXED: never overwrite whole object
-================================ */
+/* UPDATE VERIFICATION PROGRESS */
 export const updateVerification = async (
   uid: string,
   data: Partial<{
@@ -235,7 +210,7 @@ export const updateVerification = async (
     updatedAt: serverTimestamp(),
   };
 
-  // nationalId nested updates
+  // nationalId update
   if (data.nationalId) {
     if (data.nationalId.frontUploaded !== undefined)
       patch["verification.nationalId.frontUploaded"] = data.nationalId.frontUploaded;
@@ -247,13 +222,13 @@ export const updateVerification = async (
       patch["verification.nationalId.backUrl"] = data.nationalId.backUrl;
   }
 
-  // phone nested updates
+  // phone number update
   if (data.phone) {
     if (data.phone.number !== undefined) patch["verification.phone.number"] = data.phone.number;
     if (data.phone.verified !== undefined) patch["verification.phone.verified"] = data.phone.verified;
   }
 
-  // certificates
+  // certificates update
   if (data.certificatesUploaded !== undefined) {
     patch["verification.certificatesUploaded"] = data.certificatesUploaded;
   }
@@ -261,9 +236,7 @@ export const updateVerification = async (
   await updateDoc(userRef, patch);
 };
 
-/* ================================
-   SUBMIT VERIFICATION FOR REVIEW
-================================ */
+/*  SUBMIT VERIFICATION FOR REVIEW */
 export const submitVerification = async (uid: string) => {
   const userRef = doc(db, "users", uid);
 
@@ -274,26 +247,19 @@ export const submitVerification = async (uid: string) => {
   });
 };
 
-/* ================================
-   APPROVE VERIFICATION (CLIENT SIDE)
-   ✅ For now: when submit is successful
-   Later: admin should set this
-================================ */
+/*  APPROVE VERIFICATION (CLIENT SIDE) */
 export const approveProviderVerification = async (uid: string) => {
   const userRef = doc(db, "users", uid);
 
   await updateDoc(userRef, {
     "verification.status": "approved",
     "verification.approvedAt": serverTimestamp(),
-    isVerified: true, // keep your old field in sync
+    isVerified: true, 
     role: "provider",
     updatedAt: serverTimestamp(),
   });
 };
 
-/* ================================
-   SIMPLE CHECK
-================================ */
 export const isProviderApproved = (user: UserDoc | null) => {
   return user?.verification?.status === "approved";
 };

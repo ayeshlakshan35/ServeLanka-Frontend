@@ -30,25 +30,17 @@ import {
 export default function ProviderVerification() {
   const router = useRouter();
 
-  // Local-only state (NOT saved to DB until submit)
+  // Local-only save
   const [idFrontUrl, setIdFrontUrl] = useState<string | null>(null);
   const [idBackUrl, setIdBackUrl] = useState<string | null>(null);
   const [certificateUrl, setCertificateUrl] = useState<string | null>(null);
-
   const [phone, setPhone] = useState("");
   const [phoneVerified, setPhoneVerified] = useState(false);
-
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<null | "front" | "back" | "certificate">(null);
   const [submitting, setSubmitting] = useState(false);
-
   const canSubmit = !!(idFrontUrl && idBackUrl && phoneVerified);
-
-  // ✅ performance: prevent spinner + extra firestore calls on every focus
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-
-  // ✅ Only check auth + already-verified status.
-  // ❌ Do NOT prefill saved progress (you requested empty when re-entering).
   const load = useCallback(async () => {
     const uid = auth.currentUser?.uid;
     if (!uid) {
@@ -58,13 +50,10 @@ export default function ProviderVerification() {
     }
 
     try {
-      // ✅ Only show spinner first time (avoid delay feeling)
+    
       if (!hasLoadedOnce) setLoading(true);
-
-      // ✅ Fast path: read doc first
       let userDoc = await getUserProfile(uid);
 
-      // ✅ If missing, create once then read again
       if (!userDoc) {
         await ensureUserProfile(uid, { email: auth.currentUser?.email ?? "" });
         userDoc = await getUserProfile(uid);
@@ -72,13 +61,11 @@ export default function ProviderVerification() {
 
       if (!userDoc) return;
 
-      // ✅ Already verified → just go back (NO alert)
       if (userDoc.verification?.status === "approved" || userDoc.isVerified) {
         router.back();
         return;
       }
 
-      // Always start fresh (nothing loaded from DB)
       setIdFrontUrl(null);
       setIdBackUrl(null);
       setCertificateUrl(null);
@@ -95,7 +82,6 @@ export default function ProviderVerification() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const pickImage = async () => {
@@ -116,10 +102,9 @@ export default function ProviderVerification() {
     return result.assets[0].uri;
   };
 
-  // ✅ Upload to Cloudinary only (local state). No DB writes here.
+  //  Upload to Cloudinary
   const uploadLocal = async (type: "front" | "back" | "certificate") => {
     try {
-      // Block front/back upload if already exists (one per slot)
       if (type === "front" && idFrontUrl) return;
       if (type === "back" && idBackUrl) return;
 
@@ -133,7 +118,6 @@ export default function ProviderVerification() {
       if (type === "front") setIdFrontUrl(url);
       if (type === "back") setIdBackUrl(url);
 
-      // Certificate can be replaced unlimited times
       if (type === "certificate") setCertificateUrl(url);
     } catch (e: any) {
       console.log("Upload error:", e);
@@ -149,7 +133,6 @@ export default function ProviderVerification() {
     if (type === "certificate") setCertificateUrl(null);
   };
 
-  // ✅ Local "verify" only (no DB write until submit)
   const handleVerifyPhone = async () => {
     if (!phone.trim()) {
       Alert.alert("Validation", "Please enter a phone number.");
@@ -158,7 +141,6 @@ export default function ProviderVerification() {
     setPhoneVerified(true);
   };
 
-  // ✅ Save everything ONLY here
   const handleSubmit = async () => {
     try {
       const uid = auth.currentUser?.uid;
@@ -170,8 +152,7 @@ export default function ProviderVerification() {
       }
 
       setSubmitting(true);
-
-      // 1) Save all verification info to DB now (single write path)
+ 
       await updateVerification(uid, {
         nationalId: {
           frontUploaded: true,
@@ -186,7 +167,6 @@ export default function ProviderVerification() {
         certificatesUploaded: !!certificateUrl,
       });
 
-      // 2) Submit + approve (your current flow)
       await submitVerification(uid);
       await approveProviderVerification(uid);
 
@@ -320,7 +300,7 @@ export default function ProviderVerification() {
           </View>
         </View>
 
-        {/* PHONE */}
+        {/* PHONE NUMBER */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Phone Number (Required)</Text>

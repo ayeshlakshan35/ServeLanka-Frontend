@@ -1,4 +1,3 @@
-// app/profile/edit.tsx
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
@@ -33,24 +32,24 @@ import {
 export default function EditProfile() {
   const router = useRouter();
 
-  // ✅ scroll helpers
+  // scroll & input refs
   const scrollRef = useRef<ScrollView>(null);
   const phoneRef = useRef<TextInput>(null);
   const addressRef = useRef<TextInput>(null);
 
-  // ✅ Track scroll position so we can restore after keyboard closes
+  
   const currentScrollYRef = useRef(0);
   const restoreScrollYRef = useRef<number | null>(null);
   const isAutoScrollingRef = useRef(false);
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    // Keep tracking scroll position
+
     currentScrollYRef.current = e.nativeEvent.contentOffset.y;
   };
 
-  // ✅ FIX: no measureLayout (prevents your error + works with new architecture)
+  
   const scrollToField = (inputRef: React.RefObject<TextInput | null>) => {
-    // Save position BEFORE we auto-scroll
+    
     if (restoreScrollYRef.current === null) {
       restoreScrollYRef.current = currentScrollYRef.current;
     }
@@ -65,19 +64,19 @@ export default function EditProfile() {
 
       isAutoScrollingRef.current = true;
 
-      // Scroll so input stays visible above keyboard
+      
       scroll
         .getScrollResponder()
         ?.scrollResponderScrollNativeHandleToKeyboard(node, 110, true);
 
-      // Mark done shortly after
+  
       setTimeout(() => {
         isAutoScrollingRef.current = false;
       }, 250);
     }, 80);
   };
 
-  // ✅ When keyboard closes, return to previous scroll position
+
   useEffect(() => {
     const restore = () => {
       const scroll = scrollRef.current;
@@ -85,7 +84,6 @@ export default function EditProfile() {
 
       if (!scroll || y === null) return;
 
-      // Restore smoothly
       setTimeout(() => {
         scroll.scrollTo({ y, animated: true });
         restoreScrollYRef.current = null;
@@ -102,11 +100,11 @@ export default function EditProfile() {
     };
   }, []);
 
-  // We store the REAL image URL (Cloudinary) here
+  // store the REAL image URL (Cloudinary)
   const [photoUrl, setPhotoUrl] = useState<string>("");
 
   const [name, setName] = useState("");
-  const [profileEmail, setProfileEmail] = useState(""); // read-only display
+  const [profileEmail, setProfileEmail] = useState(""); 
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
 
@@ -114,7 +112,6 @@ export default function EditProfile() {
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // ✅ performance: spinner only first load
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   const loadProfile = useCallback(async () => {
@@ -264,7 +261,7 @@ export default function EditProfile() {
         <ScrollView
           ref={scrollRef}
           style={styles.container}
-          contentContainerStyle={[styles.content]} // ✅ keep
+          contentContainerStyle={[styles.content]} 
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"

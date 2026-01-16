@@ -116,13 +116,13 @@ export default function Profile() {
   const displayPhone = userData?.phone?.trim() ? userData.phone : "";
   const displayAddress = userData?.address?.trim() ? userData.address : "";
 
-  // ✅ Labels change based on verification state
+
   const leftTabLabel = isVerified ? "Profile" : "Verify as Provider";
   const bottomBtnLabel = isVerified ? "Create Post" : "Verify as Provider";
 
   const onPressBottomButton = () => {
     if (isVerified) {
-      // ✅ Change this route if your create-post screen is different
+
       router.push("/post/create");
       return;
     }
@@ -243,7 +243,7 @@ export default function Profile() {
       {tab === "profile" && (
         <>
           {isVerified ? (
-            // ✅ Your “4th image / verified content” area (replace text with your exact UI)
+            
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Provider Verification</Text>
               <Text style={styles.sectionDesc}>
@@ -272,7 +272,7 @@ export default function Profile() {
               </View>
             </View>
           ) : (
-            // ❌ Not verified → show original promo card
+            
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Unlock More Opportunities</Text>
               <Text style={styles.sectionDesc}>
