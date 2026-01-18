@@ -25,6 +25,9 @@ import {
   getUserProfile,
   submitVerification,
   updateVerification,
+  reserveNationalId, 
+  validateSriLankaNIC, 
+  normalizeSriLankaNIC, 
 } from "../../src/services/users.api";
 
 export default function ProviderVerification() {
@@ -34,14 +37,23 @@ export default function ProviderVerification() {
   const [idFrontUrl, setIdFrontUrl] = useState<string | null>(null);
   const [idBackUrl, setIdBackUrl] = useState<string | null>(null);
   const [certificateUrl, setCertificateUrl] = useState<string | null>(null);
+
   const [phone, setPhone] = useState("");
   const [phoneVerified, setPhoneVerified] = useState(false);
+
+  // NIC states
+  const [nic, setNic] = useState("");
+  const [nicVerified, setNicVerified] = useState(false);
+  const [nicError, setNicError] = useState<string | null>(null);
+  const [nicChecking, setNicChecking] = useState(false);
+
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState<
-    null | "front" | "back" | "certificate"
-  >(null);
+  const [uploading, setUploading] = useState<null | "front" | "back" | "certificate">(null);
   const [submitting, setSubmitting] = useState(false);
-  const canSubmit = !!(idFrontUrl && idBackUrl && phoneVerified);
+
+  // Now NIC verified is also required
+  const canSubmit = !!(idFrontUrl && idBackUrl && phoneVerified && nicVerified);
+
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const load = useCallback(async () => {
     const uid = auth.currentUser?.uid;
@@ -73,6 +85,12 @@ export default function ProviderVerification() {
       setPhone("");
       setPhoneVerified(false);
 
+      // Reset NIC UI state when opening
+      setNic("");
+      setNicVerified(false);
+      setNicError(null);
+      setNicChecking(false);
+
       setHasLoadedOnce(true);
     } catch (e: any) {
       Alert.alert("Error", e?.message ?? "Failed to load verification");
@@ -103,7 +121,7 @@ export default function ProviderVerification() {
     return result.assets[0].uri;
   };
 
-  //  Upload to Cloudinary
+  // Upload to Cloudinary
   const uploadLocal = async (type: "front" | "back" | "certificate") => {
     try {
       if (type === "front" && idFrontUrl) return;
@@ -134,6 +152,45 @@ export default function ProviderVerification() {
     if (type === "certificate") setCertificateUrl(null);
   };
 
+  // Verify NIC (Valid format + unique across accounts)
+  const handleVerifyNIC = async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    const input = nic.trim();
+    if (!input) {
+      setNicError("Please enter your NIC.");
+      setNicVerified(false);
+      return;
+    }
+
+    setNicError(null);
+
+    const v = validateSriLankaNIC(input);
+    if (!v.ok) {
+      setNicVerified(false);
+      setNicError(v.reason || "Invalid NIC.");
+      return;
+    }
+
+    try {
+      setNicChecking(true);
+
+      // Checks DB uniqueness
+      await reserveNationalId(uid, input);
+
+      setNicVerified(true);
+      setNicError(null);
+
+      Alert.alert("NIC Verified", "NIC is valid and not used by another account.");
+    } catch (e: any) {
+      setNicVerified(false);
+      setNicError(e?.message || "NIC verification failed.");
+    } finally {
+      setNicChecking(false);
+    }
+  };
+
   const handleVerifyPhone = async () => {
     if (!phone.trim()) {
       Alert.alert("Validation", "Please enter a phone number.");
@@ -150,15 +207,19 @@ export default function ProviderVerification() {
       if (!canSubmit) {
         Alert.alert(
           "Incomplete",
-          "Please complete required steps before submitting.",
+          "Please verify NIC + upload both ID sides + verify phone before submitting."
         );
         return;
       }
 
       setSubmitting(true);
 
+      const normalizedNic = normalizeSriLankaNIC(nic);
+
       await updateVerification(uid, {
         nationalId: {
+          number: normalizedNic, 
+          verified: true, 
           frontUploaded: true,
           frontUrl: idFrontUrl,
           backUploaded: true,
@@ -176,7 +237,7 @@ export default function ProviderVerification() {
 
       Alert.alert(
         "Success",
-        "Verification successful! Your provider account is now active.",
+        "Verification successful! Your provider account is now active."
       );
       router.back();
     } catch (e: any) {
@@ -204,7 +265,7 @@ export default function ProviderVerification() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* HEADER */}
+        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             onPress={() => router.back()}
@@ -219,20 +280,55 @@ export default function ProviderVerification() {
           <View style={{ width: 34 }} />
         </View>
 
-        {/* NATIONAL ID */}
+        {/* National ID */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>National ID Upload (Required)</Text>
             <Text style={styles.statusText}>
-              {idFrontUrl && idBackUrl ? "Completed" : "Pending"}
+              {nicVerified && idFrontUrl && idBackUrl ? "Completed" : "Pending"}
             </Text>
           </View>
 
           <Text style={styles.desc}>
-            Upload clear photos of both sides of your National ID.
+            Enter your NIC and verify it first. Then upload clear photos of both sides.
           </Text>
 
-          {/* FRONT SLOT */}
+          {/* NIC input + verify button (Placed above photos) */}
+          <View style={{ marginTop: 6 }}>
+            <TextInput
+              placeholder="NIC (Old: 123456789V | New: 200012345678)"
+              style={styles.nicInput}
+              value={nic}
+              onChangeText={(t) => {
+                setNic(t);
+                setNicVerified(false);
+                setNicError(null);
+              }}
+              autoCapitalize="characters"
+            />
+
+            {nicError ? <Text style={styles.nicErrorText}>{nicError}</Text> : null}
+
+            <TouchableOpacity
+              style={[
+                styles.nicVerifyBtn,
+                (!nic.trim() || nicVerified || nicChecking || submitting) && styles.btnDisabled,
+              ]}
+              disabled={!nic.trim() || nicVerified || nicChecking || submitting}
+              onPress={handleVerifyNIC}
+              activeOpacity={0.9}
+            >
+              {nicChecking ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={styles.verifyBtnText}>
+                  {nicVerified ? "NIC Verified" : "Verify NIC"}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Front slot */}
           <View style={styles.slotWrap}>
             <TouchableOpacity
               style={[styles.uploadSlot, idFrontUrl && styles.uploadSlotFilled]}
@@ -242,16 +338,9 @@ export default function ProviderVerification() {
             >
               {idFrontUrl ? (
                 <>
-                  <Image
-                    source={{ uri: idFrontUrl }}
-                    style={styles.slotImage}
-                  />
+                  <Image source={{ uri: idFrontUrl }} style={styles.slotImage} />
                   <View style={styles.slotLabelRow}>
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={18}
-                      color="#16A34A"
-                    />
+                    <Ionicons name="checkmark-circle" size={18} color="#16A34A" />
                     <Text style={styles.slotLabel}>Front Uploaded</Text>
                   </View>
                 </>
@@ -260,11 +349,7 @@ export default function ProviderVerification() {
                   {uploading === "front" ? (
                     <ActivityIndicator />
                   ) : (
-                    <Ionicons
-                      name="cloud-upload-outline"
-                      size={30}
-                      color="#111827"
-                    />
+                    <Ionicons name="cloud-upload-outline" size={30} color="#111827" />
                   )}
                   <Text style={styles.uploadText}>Upload ID – Front Side</Text>
                 </>
@@ -282,7 +367,7 @@ export default function ProviderVerification() {
             )}
           </View>
 
-          {/* BACK SLOT */}
+          {/* Back slot */}
           <View style={styles.slotWrap}>
             <TouchableOpacity
               style={[styles.uploadSlot, idBackUrl && styles.uploadSlotFilled]}
@@ -294,11 +379,7 @@ export default function ProviderVerification() {
                 <>
                   <Image source={{ uri: idBackUrl }} style={styles.slotImage} />
                   <View style={styles.slotLabelRow}>
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={18}
-                      color="#16A34A"
-                    />
+                    <Ionicons name="checkmark-circle" size={18} color="#16A34A" />
                     <Text style={styles.slotLabel}>Back Uploaded</Text>
                   </View>
                 </>
@@ -307,11 +388,7 @@ export default function ProviderVerification() {
                   {uploading === "back" ? (
                     <ActivityIndicator />
                   ) : (
-                    <Ionicons
-                      name="cloud-upload-outline"
-                      size={30}
-                      color="#111827"
-                    />
+                    <Ionicons name="cloud-upload-outline" size={30} color="#111827" />
                   )}
                   <Text style={styles.uploadText}>Upload ID – Back Side</Text>
                 </>
@@ -330,7 +407,7 @@ export default function ProviderVerification() {
           </View>
         </View>
 
-        {/* PHONE NUMBER */}
+        {/* Phone number */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Phone Number (Required)</Text>
@@ -369,7 +446,7 @@ export default function ProviderVerification() {
           </View>
         </View>
 
-        {/* CERTIFICATES */}
+        {/* Certificates */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Certificates (Optional)</Text>
@@ -394,16 +471,9 @@ export default function ProviderVerification() {
             >
               {certificateUrl ? (
                 <>
-                  <Image
-                    source={{ uri: certificateUrl }}
-                    style={styles.slotImage}
-                  />
+                  <Image source={{ uri: certificateUrl }} style={styles.slotImage} />
                   <View style={styles.slotLabelRow}>
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={18}
-                      color="#16A34A"
-                    />
+                    <Ionicons name="checkmark-circle" size={18} color="#16A34A" />
                     <Text style={styles.slotLabel}>Certificate Uploaded</Text>
                   </View>
                   <Text style={styles.changeHint}>Tap to change</Text>
@@ -413,11 +483,7 @@ export default function ProviderVerification() {
                   {uploading === "certificate" ? (
                     <ActivityIndicator />
                   ) : (
-                    <Ionicons
-                      name="cloud-upload-outline"
-                      size={30}
-                      color="#111827"
-                    />
+                    <Ionicons name="cloud-upload-outline" size={30} color="#111827" />
                   )}
                   <Text style={styles.uploadText}>Upload Certificate</Text>
                 </>
@@ -436,7 +502,7 @@ export default function ProviderVerification() {
           </View>
         </View>
 
-        {/* SUBMIT */}
+        {/* Submit */}
         <TouchableOpacity
           style={[
             styles.submitBtn,
@@ -502,6 +568,28 @@ const styles = StyleSheet.create({
   cardTitle: { fontWeight: "800", fontSize: 14.5, color: "#111827" },
   statusText: { fontSize: 12, color: "#9CA3AF", fontWeight: "700" },
   desc: { color: "#6B7280", marginTop: 6, marginBottom: 10, lineHeight: 18 },
+
+  nicInput: {
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: "#fff",
+  },
+  nicErrorText: {
+    marginTop: 8,
+    color: "#EF4444",
+    fontWeight: "700",
+  },
+  nicVerifyBtn: {
+    marginTop: 10,
+    backgroundColor: "#E5E7EB",
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   slotWrap: { position: "relative", marginTop: 10 },
 
