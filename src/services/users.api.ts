@@ -53,8 +53,7 @@ export type UserDoc = {
   updatedAt?: any;
 };
 
-/* NIC Validation Accoding To Sri Lanka */
-
+/* Nic Validation Accoding To Sri Lanka */
 export const normalizeSriLankaNIC = (raw: string) => raw.trim().toUpperCase();
 
 export const validateSriLankaNIC = (
@@ -113,8 +112,31 @@ export const validateSriLankaNIC = (
   };
 };
 
-/* NIC Uniqueness */
+/* Phone Validation Accoding To Sri Lanka */
+export const normalizeSriLankaPhone = (raw: string) => {
+  let s = raw.trim().replace(/\s+/g, "");
+  if (s.startsWith("+94")) return s;
+  if (s.startsWith("0")) s = s.slice(1);
+  if (s.startsWith("7")) return "+94" + s;
+  if (s.startsWith("94")) return "+" + s;
+  return s;
+};
 
+export const validateSriLankaPhone = (
+  raw: string
+): { ok: boolean; normalized?: string; reason?: string } => {
+  const p = normalizeSriLankaPhone(raw);
+  const ok = /^\+947\d{8}$/.test(p);
+  if (!ok) {
+    return {
+      ok: false,
+      reason: "Invalid Phone Enter a valid phone number",
+    };
+  }
+  return { ok: true, normalized: p };
+};
+
+/* Nic Uniqueness */
 export const reserveNationalId = async (uid: string, rawNic: string) => {
   const v = validateSriLankaNIC(rawNic);
   if (!v.ok || !v.normalized)
@@ -132,7 +154,7 @@ export const reserveNationalId = async (uid: string, rawNic: string) => {
       if (data?.uid && data.uid !== uid) {
         throw new Error("This NIC is already used by another account.");
       }
-      // Same uid 
+      // Same uid
       return;
     }
 
@@ -143,6 +165,35 @@ export const reserveNationalId = async (uid: string, rawNic: string) => {
   });
 
   return nic;
+};
+
+/* Phone Uniqueness */
+export const reservePhoneNumber = async (uid: string, rawPhone: string) => {
+  const v = validateSriLankaPhone(rawPhone);
+  if (!v.ok || !v.normalized)
+    throw new Error(v.reason || "Invalid Phone Enter a valid phone number");
+
+  const phone = v.normalized;
+  const phoneRef = doc(db, "phone_numbers", phone);
+
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(phoneRef);
+
+    if (snap.exists()) {
+      const data = snap.data() as any;
+      if (data?.uid && data.uid !== uid) {
+        throw new Error("This phone number is already used by another account.");
+      }
+      return;
+    }
+
+    tx.set(phoneRef, {
+      uid,
+      createdAt: serverTimestamp(),
+    });
+  });
+
+  return phone;
 };
 
 /* Create User Profile */

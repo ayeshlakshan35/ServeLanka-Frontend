@@ -23,11 +23,14 @@ import {
   approveProviderVerification,
   ensureUserProfile,
   getUserProfile,
+  normalizeSriLankaNIC,
+  normalizeSriLankaPhone,
+  reserveNationalId,
+  reservePhoneNumber,
   submitVerification,
   updateVerification,
-  reserveNationalId, 
-  validateSriLankaNIC, 
-  normalizeSriLankaNIC, 
+  validateSriLankaNIC,
+  validateSriLankaPhone,
 } from "../../src/services/users.api";
 
 export default function ProviderVerification() {
@@ -38,8 +41,10 @@ export default function ProviderVerification() {
   const [idBackUrl, setIdBackUrl] = useState<string | null>(null);
   const [certificateUrl, setCertificateUrl] = useState<string | null>(null);
 
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState("+94 ");
   const [phoneVerified, setPhoneVerified] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [phoneChecking, setPhoneChecking] = useState(false);
 
   // NIC states
   const [nic, setNic] = useState("");
@@ -48,7 +53,9 @@ export default function ProviderVerification() {
   const [nicChecking, setNicChecking] = useState(false);
 
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState<null | "front" | "back" | "certificate">(null);
+  const [uploading, setUploading] = useState<
+    null | "front" | "back" | "certificate"
+  >(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Now NIC verified is also required
@@ -82,8 +89,11 @@ export default function ProviderVerification() {
       setIdFrontUrl(null);
       setIdBackUrl(null);
       setCertificateUrl(null);
-      setPhone("");
+
+      setPhone("+94 ");
       setPhoneVerified(false);
+      setPhoneError(null);
+      setPhoneChecking(false);
 
       // Reset NIC UI state when opening
       setNic("");
@@ -175,14 +185,10 @@ export default function ProviderVerification() {
 
     try {
       setNicChecking(true);
-
-      // Checks DB uniqueness
       await reserveNationalId(uid, input);
-
       setNicVerified(true);
       setNicError(null);
-
-      Alert.alert("NIC Verified", "NIC is valid and not used by another account.");
+      Alert.alert("NIC Verified", "NIC is verified successfully.");
     } catch (e: any) {
       setNicVerified(false);
       setNicError(e?.message || "NIC verification failed.");
@@ -191,12 +197,67 @@ export default function ProviderVerification() {
     }
   };
 
+  const formatPhoneDisplay = (digits: string) => {
+    const d = digits.replace(/\D/g, "").slice(0, 9);
+    const a = d.slice(0, 3);
+    const b = d.slice(3, 6);
+    const c = d.slice(6, 9);
+    let out = "+94 ";
+    if (a) out += a;
+    if (b) out += " " + b;
+    if (c) out += " " + c;
+    return out;
+  };
+
+  const toNormalizedPhone = (display: string) => {
+    const digits = display.replace(/\D/g, "");
+    const after94 = digits.startsWith("94") ? digits.slice(2) : digits;
+    return "+94" + after94.slice(0, 9);
+  };
+
+  const handlePhoneChange = (t: string) => {
+    const digits = t.replace(/\D/g, "");
+    let rest = digits;
+
+    if (rest.startsWith("94")) rest = rest.slice(2);
+    const nine = rest.slice(0, 9);
+
+    setPhone(formatPhoneDisplay(nine));
+
+    setPhoneVerified(false);
+    setPhoneError(null);
+  };
+
   const handleVerifyPhone = async () => {
-    if (!phone.trim()) {
-      Alert.alert("Validation", "Please enter a phone number.");
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    const normalized = toNormalizedPhone(phone);
+
+    const v = validateSriLankaPhone(normalized);
+    if (!v.ok || !v.normalized) {
+      setPhoneVerified(false);
+      setPhoneError(v.reason || "Invalid number, Enter a valid  phone number.");
       return;
     }
-    setPhoneVerified(true);
+
+    try {
+      setPhoneChecking(true);
+      setPhoneError(null);
+
+      const reserved = await reservePhoneNumber(uid, v.normalized);
+
+      setPhone(formatPhoneDisplay(reserved.replace(/\D/g, "").slice(2)));
+      setPhoneVerified(true);
+      setPhoneError(null);
+
+      Alert.alert("Phone Verified", "Phone number verified successfully.");
+    } catch (e: any) {
+      setPhoneVerified(false);
+      setPhoneError(e?.message || "Phone verification failed.");
+    } finally {
+      setPhoneChecking(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -207,7 +268,7 @@ export default function ProviderVerification() {
       if (!canSubmit) {
         Alert.alert(
           "Incomplete",
-          "Please verify NIC + upload both ID sides + verify phone before submitting."
+          "Please verify NIC + upload both ID sides + verify phone before submitting.",
         );
         return;
       }
@@ -215,18 +276,19 @@ export default function ProviderVerification() {
       setSubmitting(true);
 
       const normalizedNic = normalizeSriLankaNIC(nic);
+      const normalizedPhone = normalizeSriLankaPhone(toNormalizedPhone(phone));
 
       await updateVerification(uid, {
         nationalId: {
-          number: normalizedNic, 
-          verified: true, 
+          number: normalizedNic,
+          verified: true,
           frontUploaded: true,
           frontUrl: idFrontUrl,
           backUploaded: true,
           backUrl: idBackUrl,
         },
         phone: {
-          number: phone.trim(),
+          number: normalizedPhone,
           verified: true,
         },
         certificatesUploaded: !!certificateUrl,
@@ -237,7 +299,7 @@ export default function ProviderVerification() {
 
       Alert.alert(
         "Success",
-        "Verification successful! Your provider account is now active."
+        "Verification successful! Your provider account is now active.",
       );
       router.back();
     } catch (e: any) {
@@ -290,7 +352,8 @@ export default function ProviderVerification() {
           </View>
 
           <Text style={styles.desc}>
-            Enter your NIC and verify it first. Then upload clear photos of both sides.
+            Enter your NIC and verify it first. Then upload clear photos of both
+            sides.
           </Text>
 
           {/* NIC input + verify button (Placed above photos) */}
@@ -307,12 +370,15 @@ export default function ProviderVerification() {
               autoCapitalize="characters"
             />
 
-            {nicError ? <Text style={styles.nicErrorText}>{nicError}</Text> : null}
+            {nicError ? (
+              <Text style={styles.nicErrorText}>{nicError}</Text>
+            ) : null}
 
             <TouchableOpacity
               style={[
                 styles.nicVerifyBtn,
-                (!nic.trim() || nicVerified || nicChecking || submitting) && styles.btnDisabled,
+                (!nic.trim() || nicVerified || nicChecking || submitting) &&
+                  styles.btnDisabled,
               ]}
               disabled={!nic.trim() || nicVerified || nicChecking || submitting}
               onPress={handleVerifyNIC}
@@ -338,9 +404,16 @@ export default function ProviderVerification() {
             >
               {idFrontUrl ? (
                 <>
-                  <Image source={{ uri: idFrontUrl }} style={styles.slotImage} />
+                  <Image
+                    source={{ uri: idFrontUrl }}
+                    style={styles.slotImage}
+                  />
                   <View style={styles.slotLabelRow}>
-                    <Ionicons name="checkmark-circle" size={18} color="#16A34A" />
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={18}
+                      color="#16A34A"
+                    />
                     <Text style={styles.slotLabel}>Front Uploaded</Text>
                   </View>
                 </>
@@ -349,7 +422,11 @@ export default function ProviderVerification() {
                   {uploading === "front" ? (
                     <ActivityIndicator />
                   ) : (
-                    <Ionicons name="cloud-upload-outline" size={30} color="#111827" />
+                    <Ionicons
+                      name="cloud-upload-outline"
+                      size={30}
+                      color="#111827"
+                    />
                   )}
                   <Text style={styles.uploadText}>Upload ID – Front Side</Text>
                 </>
@@ -379,7 +456,11 @@ export default function ProviderVerification() {
                 <>
                   <Image source={{ uri: idBackUrl }} style={styles.slotImage} />
                   <View style={styles.slotLabelRow}>
-                    <Ionicons name="checkmark-circle" size={18} color="#16A34A" />
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={18}
+                      color="#16A34A"
+                    />
                     <Text style={styles.slotLabel}>Back Uploaded</Text>
                   </View>
                 </>
@@ -388,7 +469,11 @@ export default function ProviderVerification() {
                   {uploading === "back" ? (
                     <ActivityIndicator />
                   ) : (
-                    <Ionicons name="cloud-upload-outline" size={30} color="#111827" />
+                    <Ionicons
+                      name="cloud-upload-outline"
+                      size={30}
+                      color="#111827"
+                    />
                   )}
                   <Text style={styles.uploadText}>Upload ID – Back Side</Text>
                 </>
@@ -422,28 +507,43 @@ export default function ProviderVerification() {
 
           <View style={styles.phoneRow}>
             <TextInput
-              placeholder="+94 77 123 4567"
+              placeholder="+94 760 849 549"
               style={styles.phoneInput}
               value={phone}
-              onChangeText={(t) => {
-                setPhone(t);
-                setPhoneVerified(false);
-              }}
+              onChangeText={handlePhoneChange}
               keyboardType="phone-pad"
             />
 
             <TouchableOpacity
               style={[
                 styles.verifyBtn,
-                (!phone.trim() || phoneVerified) && styles.btnDisabled,
+                (!phone.trim() ||
+                  phone === "+94 " ||
+                  phoneVerified ||
+                  phoneChecking) &&
+                  styles.btnDisabled,
               ]}
-              disabled={!phone.trim() || phoneVerified || submitting}
+              disabled={
+                !phone.trim() ||
+                phone === "+94 " ||
+                phoneVerified ||
+                phoneChecking ||
+                submitting
+              }
               onPress={handleVerifyPhone}
               activeOpacity={0.9}
             >
-              <Text style={styles.verifyBtnText}>Verify</Text>
+              {phoneChecking ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={styles.verifyBtnText}>Verify</Text>
+              )}
             </TouchableOpacity>
           </View>
+
+          {phoneError ? (
+            <Text style={styles.phoneErrorText}>{phoneError}</Text>
+          ) : null}
         </View>
 
         {/* Certificates */}
@@ -471,9 +571,16 @@ export default function ProviderVerification() {
             >
               {certificateUrl ? (
                 <>
-                  <Image source={{ uri: certificateUrl }} style={styles.slotImage} />
+                  <Image
+                    source={{ uri: certificateUrl }}
+                    style={styles.slotImage}
+                  />
                   <View style={styles.slotLabelRow}>
-                    <Ionicons name="checkmark-circle" size={18} color="#16A34A" />
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={18}
+                      color="#16A34A"
+                    />
                     <Text style={styles.slotLabel}>Certificate Uploaded</Text>
                   </View>
                   <Text style={styles.changeHint}>Tap to change</Text>
@@ -483,7 +590,11 @@ export default function ProviderVerification() {
                   {uploading === "certificate" ? (
                     <ActivityIndicator />
                   ) : (
-                    <Ionicons name="cloud-upload-outline" size={30} color="#111827" />
+                    <Ionicons
+                      name="cloud-upload-outline"
+                      size={30}
+                      color="#111827"
+                    />
                   )}
                   <Text style={styles.uploadText}>Upload Certificate</Text>
                 </>
@@ -661,6 +772,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   verifyBtnText: { fontWeight: "800", color: "#111827" },
+
+  phoneErrorText: {
+    marginTop: 8,
+    color: "#EF4444",
+    fontWeight: "700",
+  },
 
   submitBtn: {
     backgroundColor: "#F59E0B",
