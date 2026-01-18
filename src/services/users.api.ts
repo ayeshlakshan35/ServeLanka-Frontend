@@ -6,10 +6,10 @@ import {
   updateDoc,
   serverTimestamp,
   increment,
-  runTransaction, 
+  runTransaction,
 } from "firebase/firestore";
 
-/* TYPES AND INTERFACES */
+/* Types And Interfaces */
 export type VerificationStatus =
   | "not_started"
   | "in_review"
@@ -32,8 +32,8 @@ export type UserDoc = {
   verification: {
     status: VerificationStatus;
     nationalId: {
-      number: string; 
-      verified: boolean; 
+      number: string;
+      verified: boolean;
       frontUploaded: boolean;
       backUploaded: boolean;
       frontUrl: string | null;
@@ -53,7 +53,7 @@ export type UserDoc = {
   updatedAt?: any;
 };
 
-/*  NIC VALIDATION ACCODING TO SRI LANKA  */
+/* NIC Validation Accoding To Sri Lanka */
 
 export const normalizeSriLankaNIC = (raw: string) => raw.trim().toUpperCase();
 
@@ -62,11 +62,11 @@ export const validateSriLankaNIC = (
 ): { ok: boolean; normalized?: string; reason?: string } => {
   const nic = normalizeSriLankaNIC(raw);
 
-  const oldPattern = /^[0-9]{9}[V]$/; 
-  const newPattern = /^[0-9]{12}$/; 
+  const oldPattern = /^[0-9]{9}[V]$/;
+  const newPattern = /^[0-9]{12}$/;
 
   const validateDay = (ddd: number) => {
-    // male: 001-366, female: 501-866
+    // Male: 001-366, female: 501-866
     const male = ddd >= 1 && ddd <= 366;
     const female = ddd >= 501 && ddd <= 866;
     return male || female;
@@ -80,7 +80,7 @@ export const validateSriLankaNIC = (
       return { ok: false, reason: "Invalid NIC Enter a valid ID number" };
     }
 
-    // infer century reasonably
+    // Infer century reasonably
     const nowYear = new Date().getFullYear();
     const nowYY = nowYear % 100;
     const year = yy > nowYY ? 1900 + yy : 2000 + yy;
@@ -113,12 +113,12 @@ export const validateSriLankaNIC = (
   };
 };
 
-
-/* NIC UNIQUENESS */
+/* NIC Uniqueness */
 
 export const reserveNationalId = async (uid: string, rawNic: string) => {
   const v = validateSriLankaNIC(rawNic);
-  if (!v.ok || !v.normalized) throw new Error(v.reason || "Invalid NIC Enter a valid ID number");
+  if (!v.ok || !v.normalized)
+    throw new Error(v.reason || "Invalid NIC Enter a valid ID number");
 
   const nic = v.normalized;
   const nicRef = doc(db, "national_ids", nic);
@@ -132,7 +132,7 @@ export const reserveNationalId = async (uid: string, rawNic: string) => {
       if (data?.uid && data.uid !== uid) {
         throw new Error("This NIC is already used by another account.");
       }
-      // same uid -> ok (re-verify)
+      // Same uid 
       return;
     }
 
@@ -145,7 +145,7 @@ export const reserveNationalId = async (uid: string, rawNic: string) => {
   return nic;
 };
 
-/* CREATE USER PROFILE */
+/* Create User Profile */
 export const createUserProfile = async (
   uid: string,
   name: string,
@@ -160,7 +160,7 @@ export const createUserProfile = async (
     role: "user",
     isVerified: false,
 
-    // new profile fields
+    // New profile fields
     phone: "",
     address: "",
     photoUrl: "",
@@ -170,7 +170,7 @@ export const createUserProfile = async (
       status: "not_started",
       nationalId: {
         number: "",
-        verified: false, 
+        verified: false,
         frontUploaded: false,
         backUploaded: false,
         frontUrl: null,
@@ -195,7 +195,7 @@ export const ensureUserProfile = async (uid: string, seed?: Partial<UserDoc>) =>
 
   if (snap.exists()) return;
 
-  // fallback for safety if doc missing
+  // Fallback for safety if doc missing
   await setDoc(
     userRef,
     {
@@ -210,8 +210,8 @@ export const ensureUserProfile = async (uid: string, seed?: Partial<UserDoc>) =>
       verification: seed?.verification ?? {
         status: "not_started",
         nationalId: {
-          number: "", 
-          verified: false, 
+          number: "",
+          verified: false,
           frontUploaded: false,
           backUploaded: false,
           frontUrl: null,
@@ -231,7 +231,7 @@ export const ensureUserProfile = async (uid: string, seed?: Partial<UserDoc>) =>
   );
 };
 
-/*  GET USER PROFILE */
+/* Get User Profile */
 export const getUserProfile = async (uid: string): Promise<UserDoc | null> => {
   const userRef = doc(db, "users", uid);
   const snapshot = await getDoc(userRef);
@@ -258,7 +258,7 @@ export const getOrCreateUserProfile = async (
   return created;
 };
 
-/*   UPDATE USER PROFILE  */
+/* Update User Profile */
 export const updateUserProfile = async (
   uid: string,
   data: Partial<{
@@ -278,7 +278,7 @@ export const updateUserProfile = async (
   });
 };
 
-/*  START PROVIDER VERIFICATION */
+/* Start Provider Verification */
 export const startProviderVerification = async (uid: string) => {
   const userRef = doc(db, "users", uid);
 
@@ -288,13 +288,13 @@ export const startProviderVerification = async (uid: string) => {
   });
 };
 
-/* UPDATE VERIFICATION PROGRESS */
+/* Update Verification Progress */
 export const updateVerification = async (
   uid: string,
   data: Partial<{
     nationalId: {
-      number?: string; 
-      verified?: boolean; 
+      number?: string;
+      verified?: boolean;
       frontUploaded?: boolean;
       backUploaded?: boolean;
       frontUrl?: string | null;
@@ -313,7 +313,7 @@ export const updateVerification = async (
     updatedAt: serverTimestamp(),
   };
 
-  // nationalId update
+  // NationalId update
   if (data.nationalId) {
     if (data.nationalId.number !== undefined)
       patch["verification.nationalId.number"] = data.nationalId.number;
@@ -336,7 +336,7 @@ export const updateVerification = async (
       patch["verification.nationalId.backUrl"] = data.nationalId.backUrl;
   }
 
-  // phone number update
+  // Phone number update
   if (data.phone) {
     if (data.phone.number !== undefined)
       patch["verification.phone.number"] = data.phone.number;
@@ -345,7 +345,7 @@ export const updateVerification = async (
       patch["verification.phone.verified"] = data.phone.verified;
   }
 
-  // Certificates Update
+  // Certificates update
   if (data.certificatesUploaded !== undefined) {
     patch["verification.certificatesUploaded"] = data.certificatesUploaded;
   }
@@ -353,7 +353,7 @@ export const updateVerification = async (
   await updateDoc(userRef, patch);
 };
 
-/*  SUBMIT VERIFICATION FOR REVIEW */
+/* Submit Verification For Review */
 export const submitVerification = async (uid: string) => {
   const userRef = doc(db, "users", uid);
 
@@ -364,7 +364,7 @@ export const submitVerification = async (uid: string) => {
   });
 };
 
-/*  APPROVE CLIENT SIDE VERIFICATION  */
+/* Approve Client Side Verification */
 export const approveProviderVerification = async (uid: string) => {
   const userRef = doc(db, "users", uid);
 
