@@ -123,7 +123,7 @@ export default function Profile() {
   const onPressBottomButton = () => {
     if (isVerified) {
 
-      router.push("/post/create");
+      router.push("/profile/createPost");
       return;
     }
     router.push("/verify");
@@ -259,7 +259,7 @@ export default function Profile() {
 
               <View style={styles.row}>
                 <Text style={styles.rowText}>Phone Number Verification</Text>
-                <View style={styles.statusDone}>
+                <View style={styles.statusDone}> 
                   <Text style={styles.statusDoneText}>Completed</Text>
                 </View>
               </View>
