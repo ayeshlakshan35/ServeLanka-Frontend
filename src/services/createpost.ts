@@ -1,5 +1,9 @@
 // services/createpost.ts
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  Timestamp
+} from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 
 export type CreatePostPayload = {
@@ -21,7 +25,11 @@ export async function createPost(payload: CreatePostPayload) {
     price: payload.price,
     imageUrl: payload.imageUrl,
     category: payload.category,
-    createdAt: serverTimestamp(),
+    uid: user.uid,
+    published: true,
+    // set client timestamp immediately so collection-group queries ordered by
+    // `createdAt` include the new document for realtime listeners
+    createdAt: Timestamp.now(),
     status: "open",
   });
 
