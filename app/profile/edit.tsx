@@ -1,25 +1,25 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import * as ImagePicker from "expo-image-picker";
+import { useRouter } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  findNodeHandle,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  Image,
-  StyleSheet,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  SafeAreaView,
-  Platform,
-  StatusBar,
-  KeyboardAvoidingView,
-  findNodeHandle,
-  Keyboard,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
+  View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import * as ImagePicker from "expo-image-picker";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { auth } from "../../src/config/firebase";
 import { uploadToCloudinary } from "../../src/services/image";
@@ -37,19 +37,15 @@ export default function EditProfile() {
   const phoneRef = useRef<TextInput>(null);
   const addressRef = useRef<TextInput>(null);
 
-  
   const currentScrollYRef = useRef(0);
   const restoreScrollYRef = useRef<number | null>(null);
   const isAutoScrollingRef = useRef(false);
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-
     currentScrollYRef.current = e.nativeEvent.contentOffset.y;
   };
 
-  
   const scrollToField = (inputRef: React.RefObject<TextInput | null>) => {
-    
     if (restoreScrollYRef.current === null) {
       restoreScrollYRef.current = currentScrollYRef.current;
     }
@@ -64,18 +60,15 @@ export default function EditProfile() {
 
       isAutoScrollingRef.current = true;
 
-      
       scroll
         .getScrollResponder()
         ?.scrollResponderScrollNativeHandleToKeyboard(node, 110, true);
 
-  
       setTimeout(() => {
         isAutoScrollingRef.current = false;
       }, 250);
     }, 80);
   };
-
 
   useEffect(() => {
     const restore = () => {
@@ -92,7 +85,7 @@ export default function EditProfile() {
 
     const subHide = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-      restore
+      restore,
     );
 
     return () => {
@@ -104,7 +97,7 @@ export default function EditProfile() {
   const [photoUrl, setPhotoUrl] = useState<string>("");
 
   const [name, setName] = useState("");
-  const [profileEmail, setProfileEmail] = useState(""); 
+  const [profileEmail, setProfileEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
 
@@ -261,7 +254,7 @@ export default function EditProfile() {
         <ScrollView
           ref={scrollRef}
           style={styles.container}
-          contentContainerStyle={[styles.content]} 
+          contentContainerStyle={[styles.content]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
@@ -365,7 +358,9 @@ export default function EditProfile() {
               disabled={saving || uploading}
               activeOpacity={0.9}
             >
-              <Text style={styles.saveText}>{saving ? "Saving..." : "Save"}</Text>
+              <Text style={styles.saveText}>
+                {saving ? "Saving..." : "Save"}
+              </Text>
             </TouchableOpacity>
           </View>
 
