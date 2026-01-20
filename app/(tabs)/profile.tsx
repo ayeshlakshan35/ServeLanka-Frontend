@@ -1,12 +1,36 @@
-import {View,Text,ActivityIndicator,TouchableOpacity,Image,StyleSheet,ScrollView,Alert,} from "react-native";
-import { useCallback, useState } from "react";
-import { auth } from "../../src/config/firebase";
-import {ensureUserProfile, getUserProfile,updateUserProfile,isProviderApproved,UserDoc,} from "../../src/services/users.api";
-import { signOut } from "firebase/auth";
-import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import { useFocusEffect, useRouter } from "expo-router";
+import { signOut } from "firebase/auth";
+import { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { auth } from "../../src/config/firebase";
 import { uploadToCloudinary } from "../../src/services/image";
+import {
+  ensureUserProfile,
+  getUserProfile,
+  isProviderApproved,
+  updateUserProfile,
+  UserDoc,
+} from "../../src/services/users.api";
+
+// ✅ NEW: posts
+import {
+  deleteMyPost,
+  listenMyPosts,
+  MyPost,
+} from "../../src/services/post.service";
+import PostCard from "../profile/postcard";
 
 export default function Profile() {
   const [userData, setUserData] = useState<UserDoc | null>(null);
@@ -16,6 +40,11 @@ export default function Profile() {
   const router = useRouter();
 
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+
+  // ✅ NEW: posts state
+  const [posts, setPosts] = useState<MyPost[]>([]);
+  const [postsLoading, setPostsLoading] = useState(true);
+  const [actionPostId, setActionPostId] = useState<string | null>(null);
 
   const loadProfile = useCallback(async () => {
     try {
@@ -47,7 +76,22 @@ export default function Profile() {
   useFocusEffect(
     useCallback(() => {
       loadProfile();
-    }, [loadProfile])
+
+      // ✅ NEW: listen my posts (only this part is added)
+      setPostsLoading(true);
+      const unsub = listenMyPosts(
+        (p) => {
+          setPosts(p);
+          setPostsLoading(false);
+        },
+        (err) => {
+          console.log("listenMyPosts error:", err);
+          setPostsLoading(false);
+        },
+      );
+
+      return () => unsub();
+    }, [loadProfile]),
   );
 
   const pickAndUpload = async () => {
@@ -93,6 +137,22 @@ export default function Profile() {
     }
   };
 
+  const handleDeletePost = async (postId: string) => {
+    try {
+      setActionPostId(postId);
+      await deleteMyPost(postId);
+      Alert.alert("Deleted", "Your post has been removed.");
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "Failed to delete post.");
+    } finally {
+      setActionPostId(null);
+    }
+  };
+
+  const handleEditPost = (post: MyPost) => {
+    router.push({ pathname: "/profile/editPost", params: { id: post.id } });
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -116,18 +176,19 @@ export default function Profile() {
   const displayPhone = userData?.phone?.trim() ? userData.phone : "";
   const displayAddress = userData?.address?.trim() ? userData.address : "";
 
-
   const leftTabLabel = isVerified ? "Profile" : "Verify as Provider";
   const bottomBtnLabel = isVerified ? "Create Post" : "Verify as Provider";
 
   const onPressBottomButton = () => {
     if (isVerified) {
-
-      router.push("/post/create");
+      router.push("/profile/createPost");
       return;
     }
     router.push("/verify");
   };
+
+  // ✅ NEW: check if has posts
+  const hasPosts = posts.length > 0;
 
   return (
     <ScrollView
@@ -164,7 +225,9 @@ export default function Profile() {
           <Text style={styles.name}>{displayName}</Text>
           <Text style={styles.subText}>{displayEmail}</Text>
           {!!displayPhone && <Text style={styles.subText}>{displayPhone}</Text>}
-          {!!displayAddress && <Text style={styles.subText}>{displayAddress}</Text>}
+          {!!displayAddress && (
+            <Text style={styles.subText}>{displayAddress}</Text>
+          )}
 
           <View style={styles.badgeRow}>
             {isVerified ? (
@@ -206,7 +269,9 @@ export default function Profile() {
           <Text
             style={[
               styles.tabLabel,
-              tab === "profile" ? styles.tabLabelActive : styles.tabLabelInactive,
+              tab === "profile"
+                ? styles.tabLabelActive
+                : styles.tabLabelInactive,
             ]}
           >
             {leftTabLabel}
@@ -229,7 +294,9 @@ export default function Profile() {
           <Text
             style={[
               styles.tabLabel,
-              tab === "activity" ? styles.tabLabelActive : styles.tabLabelInactive,
+              tab === "activity"
+                ? styles.tabLabelActive
+                : styles.tabLabelInactive,
             ]}
           >
             Activity
@@ -242,70 +309,146 @@ export default function Profile() {
       {/* MAIN CONTENT */}
       {tab === "profile" && (
         <>
-          {isVerified ? (
-            
-            <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Provider Verification</Text>
-              <Text style={styles.sectionDesc}>
-                Your provider account is verified. You can now create posts and receive jobs.
-              </Text>
+          {/* ✅ If verified AND has posts => show My Posts (hide verification card + big button) */}
+          {isVerified && hasPosts ? (
+            <View style={{ marginTop: 6 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 10,
+                  paddingHorizontal: 4,
+                }}
+              >
+                <Text
+                  style={{ fontSize: 18, fontWeight: "800", color: "#111827" }}
+                >
+                  My Posts
+                </Text>
 
-              <View style={styles.row}>
-                <Text style={styles.rowText}>Identity Document Upload</Text>
-                <View style={styles.statusDone}>
-                  <Text style={styles.statusDoneText}>Completed</Text>
-                </View>
+                <TouchableOpacity
+                  onPress={() => router.push("/profile/createPost")}
+                  activeOpacity={0.85}
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 10,
+                    backgroundColor: "#fff",
+                    borderWidth: 1,
+                    borderColor: "#E5E7EB",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Ionicons name="add" size={22} color="#111827" />
+                </TouchableOpacity>
               </View>
 
-              <View style={styles.row}>
-                <Text style={styles.rowText}>Phone Number Verification</Text>
-                <View style={styles.statusDone}>
-                  <Text style={styles.statusDoneText}>Completed</Text>
-                </View>
-              </View>
-
-              <View style={styles.row}>
-                <Text style={styles.rowText}>Service Proof Upload</Text>
-                <View style={styles.statusDone}>
-                  <Text style={styles.statusDoneText}>Completed</Text>
-                </View>
-              </View>
+              {postsLoading ? (
+                <ActivityIndicator />
+              ) : (
+                <FlatList
+                  data={posts}
+                  keyExtractor={(item) => item.id}
+                  scrollEnabled={false}
+                  renderItem={({ item }) => (
+                    <PostCard
+                      post={item}
+                      onEdit={handleEditPost}
+                      onDelete={handleDeletePost}
+                      disabled={actionPostId === item.id}
+                    />
+                  )}
+                />
+              )}
             </View>
           ) : (
-            
-            <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Unlock More Opportunities</Text>
-              <Text style={styles.sectionDesc}>
-                Join our verified provider network and expand your reach.
-              </Text>
+            <>
+              {/* keep your current verification UI when no posts OR not verified */}
+              {isVerified ? (
+                <View style={styles.card}>
+                  <Text style={styles.sectionTitle}>Provider Verification</Text>
+                  <Text style={styles.sectionDesc}>
+                    Your provider account is verified. You can now create posts
+                    and receive jobs.
+                  </Text>
 
-              <View style={styles.benefits}>
-                <View style={styles.benefitRow}>
-                  <Ionicons name="briefcase-outline" size={20} color="#F59E0B" />
-                  <Text style={styles.benefitText}>Increased Work Opportunities</Text>
-                </View>
+                  <View style={styles.row}>
+                    <Text style={styles.rowText}>Identity Document Upload</Text>
+                    <View style={styles.statusDone}>
+                      <Text style={styles.statusDoneText}>Completed</Text>
+                    </View>
+                  </View>
 
-                <View style={styles.benefitRow}>
-                  <Ionicons name="cash-outline" size={20} color="#F59E0B" />
-                  <Text style={styles.benefitText}>Higher Earning Potential</Text>
-                </View>
+                  <View style={styles.row}>
+                    <Text style={styles.rowText}>
+                      Phone Number Verification
+                    </Text>
+                    <View style={styles.statusDone}>
+                      <Text style={styles.statusDoneText}>Completed</Text>
+                    </View>
+                  </View>
 
-                <View style={styles.benefitRow}>
-                  <Ionicons name="shield-checkmark-outline" size={20} color="#F59E0B" />
-                  <Text style={styles.benefitText}>Trusted Provider Badge</Text>
+                  <View style={styles.row}>
+                    <Text style={styles.rowText}>Service Proof Upload</Text>
+                    <View style={styles.statusDone}>
+                      <Text style={styles.statusDoneText}>Completed</Text>
+                    </View>
+                  </View>
                 </View>
-              </View>
-            </View>
+              ) : (
+                <View style={styles.card}>
+                  <Text style={styles.sectionTitle}>
+                    Unlock More Opportunities
+                  </Text>
+                  <Text style={styles.sectionDesc}>
+                    Join our verified provider network and expand your reach.
+                  </Text>
+
+                  <View style={styles.benefits}>
+                    <View style={styles.benefitRow}>
+                      <Ionicons
+                        name="briefcase-outline"
+                        size={20}
+                        color="#F59E0B"
+                      />
+                      <Text style={styles.benefitText}>
+                        Increased Work Opportunities
+                      </Text>
+                    </View>
+
+                    <View style={styles.benefitRow}>
+                      <Ionicons name="cash-outline" size={20} color="#F59E0B" />
+                      <Text style={styles.benefitText}>
+                        Higher Earning Potential
+                      </Text>
+                    </View>
+
+                    <View style={styles.benefitRow}>
+                      <Ionicons
+                        name="shield-checkmark-outline"
+                        size={20}
+                        color="#F59E0B"
+                      />
+                      <Text style={styles.benefitText}>
+                        Trusted Provider Badge
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Big button only when NOT (verified + hasPosts) */}
+              <TouchableOpacity
+                onPress={onPressBottomButton}
+                style={styles.verifyBtn}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.verifyText}>{bottomBtnLabel}</Text>
+              </TouchableOpacity>
+            </>
           )}
-
-          {/* Bottom button changes based on verified state */}
-          <TouchableOpacity
-            onPress={onPressBottomButton}
-            style={styles.verifyBtn}
-            activeOpacity={0.9}
-          >
-            <Text style={styles.verifyText}>{bottomBtnLabel}</Text>
-          </TouchableOpacity>
         </>
       )}
 
@@ -502,4 +645,3 @@ const styles = StyleSheet.create({
 
   activityWrap: { backgroundColor: "#fff", borderRadius: 12, padding: 16 },
 });
-

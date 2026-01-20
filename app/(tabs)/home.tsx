@@ -1,205 +1,50 @@
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useState } from "react";
-import {
-  Image,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import React, { useCallback, useState } from "react";
+import { ActivityIndicator, FlatList, View } from "react-native";
+import { useFocusEffect } from "expo-router";
 
-// Import Theme & Data
-import { globalStyles } from "../../constants/globalStyles";
-import { COLORS } from "../../constants/index";
-import { CATEGORIES, SERVICES } from "../../constants/services";
+import HomePostCard from "../home/homepostcard";
+import { listenHomePosts, HomePost } from "../../src/services/homecontroller";
 
 export default function HomeScreen() {
-  const router = useRouter();
-  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [posts, setPosts] = useState<HomePost[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Logic to filter services based on selected category
-  const filteredServices =
-    selectedCategory === "All"
-      ? SERVICES
-      : SERVICES.filter((s) => s.category === selectedCategory);
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      const unsub = listenHomePosts(
+        (p) => {
+          setPosts(p);
+          setLoading(false);
+        },
+        (err) => {
+          console.log("home posts error:", err);
+          setLoading(false);
+        }
+      );
+
+      return () => unsub();
+    }, [])
+  );
 
   return (
-    <SafeAreaView style={globalStyles.container}>
-      {/* Top Navigation Bar - Notification & Avatar */}
-      <View style={styles.topNav}>
-        <TouchableOpacity style={styles.notificationBtn}>
-          <Ionicons
-            name="notifications-outline"
-            size={24}
-            color={COLORS.text}
-          />
-        </TouchableOpacity>
-        <Image
-          source={{ uri: "https://i.pravatar.cc/100" }}
-          style={styles.topAvatar}
+    <View className="flex-1 bg-gray-100 px-4 pt-4">
+      {loading ? (
+        <ActivityIndicator />
+      ) : (
+        <FlatList
+          data={posts}
+          keyExtractor={(item) => `${item.uid}_${item.id}`}
+          renderItem={({ item }) => (
+            <HomePostCard
+              post={item}
+              onPressBook={(p) => console.log("Book", p.id)}
+            />
+          )}
+          showsVerticalScrollIndicator={false}
         />
-      </View>
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        style={styles.scrollContent}
-      >
-        {/* Horizontal Divider */}
-        <View style={styles.divider} />
-
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <Ionicons name="search-outline" size={20} color={COLORS.textLight} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search for services..."
-          />
-          <Ionicons name="location-outline" size={20} color={COLORS.primary} />
-        </View>
-
-        {/* Categories Section */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Categories</Text>
-          <TouchableOpacity>
-            <Text style={styles.seeAll}>See All →</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Horizontal Category Selector */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.catRow}
-        >
-          {CATEGORIES.map((cat) => (
-            <TouchableOpacity
-              key={cat}
-              onPress={() => setSelectedCategory(cat)}
-              style={styles.catItem}
-            >
-              <View
-                style={[
-                  styles.catIcon,
-                  selectedCategory === cat && {
-                    backgroundColor: COLORS.primary,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name={
-                    cat === "All"
-                      ? "apps"
-                      : cat === "Cleaning"
-                        ? "home-outline"
-                        : cat === "Plumbing"
-                          ? "hammer-outline"
-                          : cat === "Beauty"
-                            ? "brush-outline"
-                            : cat === "Carpentry"
-                              ? "build-outline"
-                              : cat === "Painting"
-                                ? "color-palette-outline"
-                                : cat === "Gardening"
-                                  ? "leaf-outline"
-                                  : cat === "Electrical"
-                                    ? "flash-outline"
-                                    : "apps"
-                  }
-                  size={24}
-                  color={selectedCategory === cat ? "#fff" : COLORS.textLight}
-                />
-              </View>
-              <Text
-                style={[
-                  styles.catText,
-                  selectedCategory === cat && {
-                    color: COLORS.primary,
-                    fontWeight: "bold",
-                  },
-                ]}
-              >
-                {cat}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Popular Services Section */}
-        <View style={styles.sectionHeaderWithCount}>
-          <Text style={styles.sectionTitle}>Popular Services</Text>
-          <Text style={styles.serviceCount}>
-            {filteredServices.length} services
-          </Text>
-        </View>
-
-        {/* Dynamic Service List */}
-        {filteredServices.map((item) => (
-          <View key={item.id} style={styles.card}>
-            <Image source={{ uri: item.imageUrl }} style={styles.cardImg} />
-            <View style={styles.cardBody}>
-              <Text style={styles.cardTitle}>{item.title}</Text>
-              <Text style={styles.cardDesc} numberOfLines={2}>
-                {item.description}
-              </Text>
-
-              <View style={styles.providerRow}>
-                <Image
-                  source={{ uri: item.provider.avatar }}
-                  style={styles.smallAvatar}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.providerName}>{item.provider.name}</Text>
-                  <Text style={styles.reviewText}>
-                    ⭐ {item.provider.rating}
-                  </Text>
-                </View>
-                <Text style={styles.price}>{item.price}</Text>
-              </View>
-
-              {/* Wireframe Action Footer */}
-              <View style={styles.cardFooter}>
-                <View style={styles.actionIcons}>
-                  <TouchableOpacity>
-                    <Ionicons
-                      name="thumbs-up-outline"
-                      size={22}
-                      color="#666"
-                      style={{ marginRight: 20 }}
-                    />
-                  </TouchableOpacity>
-                  <TouchableOpacity>
-                    <Ionicons
-                      name="chatbubble-outline"
-                      size={22}
-                      color="#666"
-                      style={{ marginRight: 20 }}
-                    />
-                  </TouchableOpacity>
-                  <TouchableOpacity>
-                    <Ionicons
-                      name="share-social-outline"
-                      size={22}
-                      color="#666"
-                    />
-                  </TouchableOpacity>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.bookBtn}
-                  onPress={() => router.push(`/book/${item.id}`)}
-                >
-                  <Text style={styles.bookBtnText}>Book</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        ))}
-      </ScrollView>
-    </SafeAreaView>
+      )}
+    </View>
   );
 }
 
