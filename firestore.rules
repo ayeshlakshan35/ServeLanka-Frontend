@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // User profile
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      // Posts under a user
+      match /posts/{postId} {
+        // Owner-only writes
+        allow create, update, delete: if request.auth != null && request.auth.uid == uid;
+
+        // Reads: owner OR any verified post (public)
+        allow read: if (request.auth != null && request.auth.uid == uid)
+                    || resource.data.isProviderVerified == true;
+      }
+    }
+
+    // Collection group reads for /posts (Home feed) — public for verified posts
+    match /{path=**}/posts/{postId} {
+      allow read: if resource.data.isProviderVerified == true;
+    }
+
+    // National IDs
+    match /national_ids/{nic} {
+      allow get: if request.auth != null;
+      allow list: if false;
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid
+                    && !exists(/databases/$(database)/documents/national_ids/$(nic));
+      allow update: if false;
+      allow delete: if request.auth != null
+                    && resource.data.uid == request.auth.uid;
+    }
+
+    // Phone numbers
+    match /phone_numbers/{phone} {
+      allow get: if request.auth != null;
+      allow list: if false;
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid
+                    && !exists(/databases/$(database)/documents/phone_numbers/$(phone));
+      allow update: if false;
+      allow delete: if request.auth != null
+                    && resource.data.uid == request.auth.uid;
+    }
+  }
+}

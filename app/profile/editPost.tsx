@@ -1,35 +1,39 @@
-// app/create-post.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
-  ActionSheetIOS,
-  Alert,
-  Image,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
+    ActionSheetIOS,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Platform,
+    Pressable,
+    ScrollView,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 
-import { createPost } from "../../src/services/createpost";
 import { uploadToCloudinary } from "../../src/services/image";
+import { getMyPostById, updateMyPost } from "../../src/services/post.service";
 
-export default function CreatePostScreen() {
+export default function EditPostScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ id: string }>();
+  const postId = params.id;
 
   const [notes, setNotes] = useState("");
-  const [price, setPrice] = useState("150");
-
-  // Category + Other category
+  const [price, setPrice] = useState("");
   const [category, setCategory] = useState<string>("");
   const [otherCategory, setOtherCategory] = useState<string>("");
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [originalImageUrl, setOriginalImageUrl] = useState<string>("");
 
-  // Static category options (iOS uses ActionSheet)
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
   const CATEGORY_OPTIONS = [
     { label: "Cleaning", value: "cleaning" },
     { label: "Plumbing", value: "plumbing" },
@@ -38,14 +42,47 @@ export default function CreatePostScreen() {
     { label: "Gardening", value: "gardening" },
     { label: "Repair / Maintenance", value: "repair" },
   ];
+
   const labelForValue = (v: string) =>
     CATEGORY_OPTIONS.find((o) => o.value === v)?.label ?? "Other";
 
-  // Image + loading
-  const [imageUri, setImageUri] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    loadPost();
+  }, []);
 
-  // Pick image
+  const loadPost = async () => {
+    if (!postId) {
+      Alert.alert("Error", "No post ID provided");
+      router.back();
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const post = await getMyPostById(postId);
+
+      setNotes(post.notes);
+      setPrice(String(post.price));
+      setOriginalImageUrl(post.imageUrl);
+
+      // Check if category is in predefined options
+      const predefined = CATEGORY_OPTIONS.find(
+        (opt) => opt.value === post.category.toLowerCase(),
+      );
+      if (predefined) {
+        setCategory(predefined.value);
+      } else {
+        setCategory("other");
+        setOtherCategory(post.category);
+      }
+    } catch (err: any) {
+      Alert.alert("Error", err?.message || "Failed to load post");
+      router.back();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const pickImage = async () => {
     try {
       const { status } =
@@ -69,8 +106,7 @@ export default function CreatePostScreen() {
     }
   };
 
-  // Create post
-  const handleCreatePost = async () => {
+  const handleUpdatePost = async () => {
     if (!category) return Alert.alert("Error", "Please select a category.");
 
     if (category === "other" && !otherCategory.trim()) {
@@ -80,36 +116,47 @@ export default function CreatePostScreen() {
     if (!notes.trim()) return Alert.alert("Error", "Please add notes.");
     if (!price || isNaN(Number(price)))
       return Alert.alert("Error", "Enter a valid price.");
-    if (!imageUri) return Alert.alert("Error", "Please upload a photo.");
 
     const finalCategory =
       category === "other" ? otherCategory.trim() : category;
 
-    setLoading(true);
+    setSaving(true);
     try {
-      // 1) Upload image to Cloudinary
-      const imageUrl = await uploadToCloudinary(imageUri, {
-        fileName: `post-${Date.now()}.jpg`,
-        mimeType: "image/jpeg",
-        resourceType: "image",
-      });
+      let imageUrl = originalImageUrl;
 
-      // 2) Save Firestore doc
-      await createPost({
+      // Upload new image if changed
+      if (imageUri) {
+        imageUrl = await uploadToCloudinary(imageUri, {
+          fileName: `post-${Date.now()}.jpg`,
+          mimeType: "image/jpeg",
+          resourceType: "image",
+        });
+      }
+
+      await updateMyPost(postId!, {
         notes: notes.trim(),
         price: Number(price),
         imageUrl,
         category: finalCategory,
       });
 
-      Alert.alert("Success", "Post created successfully!");
+      Alert.alert("Success", "Post updated successfully!");
       router.back();
     } catch (err: any) {
       Alert.alert("Failed", err?.message || "Something went wrong");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
+
+  if (loading) {
+    return (
+      <View className="flex-1 bg-white items-center justify-center">
+        <ActivityIndicator size="large" />
+        <Text className="mt-3 text-sm text-gray-500">Loading post...</Text>
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1 bg-white">
@@ -119,14 +166,12 @@ export default function CreatePostScreen() {
           onPress={() => router.back()}
           className="absolute left-4 h-10 w-10 items-center justify-center"
           hitSlop={10}
-          disabled={loading}
+          disabled={saving}
         >
           <Ionicons name="chevron-back" size={22} color="#111827" />
         </Pressable>
 
-        <Text className="text-base font-semibold text-gray-900">
-          Create Post
-        </Text>
+        <Text className="text-base font-semibold text-gray-900">Edit Post</Text>
       </View>
 
       <ScrollView
@@ -138,21 +183,27 @@ export default function CreatePostScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Upload Box */}
+        {/* Image Upload */}
         <Pressable
           onPress={pickImage}
-          disabled={loading}
+          disabled={saving}
           className="mt-6 rounded-2xl border border-dashed border-gray-300 bg-gray-50 py-10 items-center justify-center"
         >
           <Ionicons name="cloud-upload-outline" size={26} color="#6B7280" />
           <Text className="mt-3 text-sm font-medium text-gray-600">
-            {imageUri ? "Change Photo" : "Upload Photo"}
+            {imageUri || originalImageUrl ? "Change Photo" : "Upload Photo"}
           </Text>
           <Text className="mt-1 text-xs text-gray-400">Tap to upload file</Text>
 
           {imageUri ? (
             <Image
               source={{ uri: imageUri }}
+              className="mt-4 h-28 w-28 rounded-xl"
+              resizeMode="cover"
+            />
+          ) : originalImageUrl ? (
+            <Image
+              source={{ uri: originalImageUrl }}
               className="mt-4 h-28 w-28 rounded-xl"
               resizeMode="cover"
             />
@@ -164,7 +215,6 @@ export default function CreatePostScreen() {
           Category
         </Text>
 
-        {/* Category input: Android uses native Picker; iOS uses ActionSheet to avoid grey inline bar */}
         <View
           style={{
             marginTop: 8,
@@ -182,7 +232,7 @@ export default function CreatePostScreen() {
                 setCategory(value);
                 if (value !== "other") setOtherCategory("");
               }}
-              enabled={!loading}
+              enabled={!saving}
               mode="dropdown"
             >
               <Picker.Item label="Select category" value="" />
@@ -197,7 +247,7 @@ export default function CreatePostScreen() {
             </Picker>
           ) : (
             <Pressable
-              disabled={loading}
+              disabled={saving}
               onPress={() => {
                 const options = [
                   ...CATEGORY_OPTIONS.map((o) => o.label),
@@ -211,7 +261,7 @@ export default function CreatePostScreen() {
                     title: "Select category",
                   },
                   (buttonIndex) => {
-                    if (buttonIndex === options.length - 1) return; // Cancel
+                    if (buttonIndex === options.length - 1) return;
                     if (buttonIndex === CATEGORY_OPTIONS.length) {
                       setCategory("other");
                       return;
@@ -238,7 +288,7 @@ export default function CreatePostScreen() {
           )}
         </View>
 
-        {/* Other category input */}
+        {/* Other category */}
         {category === "other" && (
           <>
             <Text className="mt-4 text-sm font-semibold text-gray-800">
@@ -250,7 +300,7 @@ export default function CreatePostScreen() {
                 onChangeText={setOtherCategory}
                 placeholder='Example: "Ceiling Fan Repair"'
                 placeholderTextColor="#9CA3AF"
-                editable={!loading}
+                editable={!saving}
                 className="text-sm text-gray-800"
               />
             </View>
@@ -265,39 +315,41 @@ export default function CreatePostScreen() {
           <TextInput
             value={notes}
             onChangeText={setNotes}
-            placeholder="Any specific instructions or requests?"
+            placeholder="Add details about your service"
             placeholderTextColor="#9CA3AF"
+            editable={!saving}
+            className="text-sm text-gray-800 min-h-[60px]"
             multiline
-            editable={!loading}
-            className="text-sm text-gray-800"
-            style={{ minHeight: 70, textAlignVertical: "top" }}
+            textAlignVertical="top"
           />
         </View>
 
         {/* Price */}
-        <Text className="mt-6 text-sm font-semibold text-gray-800">Price</Text>
+        <Text className="mt-6 text-sm font-semibold text-gray-800">
+          Price per room (LKR)
+        </Text>
         <View className="mt-2 rounded-xl border border-orange-400 bg-white px-4 py-3">
           <TextInput
             value={price}
             onChangeText={setPrice}
-            keyboardType="numeric"
-            placeholder="150"
+            placeholder="0"
             placeholderTextColor="#9CA3AF"
-            editable={!loading}
+            keyboardType="numeric"
+            editable={!saving}
             className="text-sm text-gray-800"
           />
         </View>
 
-        {/* Button */}
+        {/* Submit Button */}
         <Pressable
-          onPress={handleCreatePost}
-          disabled={loading}
-          className={`mt-10 h-12 rounded-xl items-center justify-center ${
-            loading ? "bg-gray-400" : "bg-[#F2B233]"
+          onPress={handleUpdatePost}
+          disabled={saving}
+          className={`mt-8 rounded-2xl py-4 items-center ${
+            saving ? "bg-gray-300" : "bg-orange-400"
           }`}
         >
-          <Text className="text-white font-semibold">
-            {loading ? "Creating..." : "Create Post"}
+          <Text className="text-base font-semibold text-white">
+            {saving ? "Updating..." : "Update Post"}
           </Text>
         </Pressable>
       </ScrollView>
