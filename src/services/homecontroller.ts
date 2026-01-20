@@ -1,17 +1,17 @@
 // src/services/homecontroller.ts
-import { db } from "../config/firebase";
 import {
   collectionGroup,
+  DocumentData,
+  limit,
   onSnapshot,
   orderBy,
   query,
-  DocumentData,
-  limit,
 } from "firebase/firestore";
+import { db } from "../config/firebase";
 
 export type HomePost = {
   id: string;
-  uid: string;          // owner user id
+  uid: string; // owner user id
   category: string;
   notes: string;
   price: number;
@@ -22,7 +22,7 @@ export type HomePost = {
 export function listenHomePosts(
   onChange: (posts: HomePost[]) => void,
   onError?: (e: any) => void,
-  options?: { pageSize?: number }
+  options?: { pageSize?: number },
 ) {
   const pageSize = options?.pageSize ?? 30;
 
@@ -30,11 +30,13 @@ export function listenHomePosts(
   const q = query(
     collectionGroup(db, "posts"),
     orderBy("createdAt", "desc"),
-    limit(pageSize)
+    limit(pageSize),
   );
 
+  // includeMetadataChanges: true lets clients receive local/pending writes
   const unsub = onSnapshot(
     q,
+    { includeMetadataChanges: true },
     (snap) => {
       const posts: HomePost[] = snap.docs.map((d) => {
         const data = d.data() as DocumentData;
@@ -49,13 +51,14 @@ export function listenHomePosts(
           notes: data.notes ?? "",
           price: Number(data.price ?? 0),
           imageUrl: data.imageUrl ?? "",
-          createdAt: data.createdAt,
+          // serverTimestamp may be null locally until server updates it
+          createdAt: data.createdAt ?? null,
         };
       });
 
       onChange(posts);
     },
-    (err) => onError?.(err)
+    (err) => onError?.(err),
   );
 
   return unsub;
