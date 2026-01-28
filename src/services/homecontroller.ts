@@ -1,11 +1,11 @@
 // src/services/homecontroller.ts
 import {
-  collectionGroup,
-  DocumentData,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
+    collectionGroup,
+    DocumentData,
+    limit,
+    onSnapshot,
+    orderBy,
+    query,
 } from "firebase/firestore";
 import { db } from "../config/firebase";
 
@@ -33,10 +33,9 @@ export function listenHomePosts(
     limit(pageSize),
   );
 
-  // includeMetadataChanges: true lets clients receive local/pending writes
+  // Listen for real-time updates
   const unsub = onSnapshot(
     q,
-    { includeMetadataChanges: true },
     (snap) => {
       const posts: HomePost[] = snap.docs.map((d) => {
         const data = d.data() as DocumentData;

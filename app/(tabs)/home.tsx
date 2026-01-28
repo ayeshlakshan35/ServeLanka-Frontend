@@ -1,4 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -10,7 +12,9 @@ import {
   View,
 } from "react-native";
 
+import { auth } from "../../src/config/firebase";
 import { HomePost, listenHomePosts } from "../../src/services/homecontroller";
+import { getUserProfile, UserDoc } from "../../src/services/users.api";
 import HomePostCard from "../home/homepostcard";
 
 const CATEGORIES = [
@@ -43,13 +47,44 @@ function normalizeCategory(raw: string) {
 export default function HomeScreen() {
   const [posts, setPosts] = useState<HomePost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userData, setUserData] = useState<UserDoc | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const router = useRouter();
 
   // UI state
   const [activeCategory, setActiveCategory] = useState("All");
   const [search, setSearch] = useState("");
 
-  // ✅ Real-time listener
+  // ✅ Wait for auth state to be ready
   useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      setIsAuthReady(true);
+      setAuthUserId(user?.uid ?? null);
+
+      if (!user) {
+        setUserData(null);
+        return;
+      }
+
+      getUserProfile(user.uid)
+        .then((data) => setUserData(data))
+        .catch((err) => console.log("Failed to load user profile:", err));
+    });
+
+    return () => unsubAuth();
+  }, []);
+
+  // ✅ Real-time listener - re-run on auth changes
+  useEffect(() => {
+    if (!isAuthReady) return;
+
+    if (!authUserId) {
+      setPosts([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     const unsub = listenHomePosts(
       (p) => {
@@ -60,11 +95,11 @@ export default function HomeScreen() {
         console.log("home posts error:", err);
         setLoading(false);
       },
-      { pageSize: 50 }
+      { pageSize: 50 },
     );
 
     return () => unsub();
-  }, []);
+  }, [isAuthReady, authUserId]);
 
   // ✅ Filter by category + search
   const filteredPosts = useMemo(() => {
@@ -85,25 +120,51 @@ export default function HomeScreen() {
     });
   }, [posts, search, activeCategory]);
 
+  // Map categories to icons
+  const getCategoryIcon = (category: string) => {
+    const iconMap: Record<string, string> = {
+      All: "grid",
+      Cleaning: "home",
+      Plumbing: "hammer",
+      Beauty: "brush",
+      Carpentry: "build",
+      Painting: "color-palette",
+      Gardening: "leaf",
+      Electrical: "flash",
+      Other: "ellipsis-horizontal",
+    };
+    return iconMap[category] || "ellipsis-horizontal";
+  };
+
   return (
     <View className="flex-1 bg-white">
-      {/* ✅ Top bar */}
+      {/* ✅ Top bar - App Logo & Profile */}
       <View className="px-4 pt-4 flex-row items-center justify-between">
-        <Pressable className="h-10 w-10 rounded-xl bg-gray-100 items-center justify-center">
-          <Ionicons name="grid-outline" size={20} color="#111827" />
-        </Pressable>
+        {/* App Logo - Like Facebook */}
+        <Text className="text-[26px] font-extrabold text-[#F2B233]">
+          ServeLanka
+        </Text>
 
-        <Text className="text-[16px] font-extrabold text-gray-900">Home</Text>
-
-        <Pressable className="h-10 w-10 rounded-full bg-gray-200 items-center justify-center overflow-hidden">
-          {/* If you have user avatar url later, replace with Image */}
-          <Ionicons name="person" size={18} color="#111827" />
+        {/* User Profile Picture */}
+        <Pressable
+          onPress={() => router.push("/(tabs)/profile")}
+          className="h-10 w-10 rounded-full bg-gray-200 items-center justify-center overflow-hidden"
+        >
+          {userData?.photoUrl ? (
+            <Image
+              source={{ uri: userData.photoUrl }}
+              className="h-full w-full"
+              resizeMode="cover"
+            />
+          ) : (
+            <Ionicons name="person" size={18} color="#111827" />
+          )}
         </Pressable>
       </View>
 
-      {/* ✅ Search */}
+      {/* ✅ Search - Updated with Location Icon */}
       <View className="px-4 mt-4">
-        <View className="flex-row items-center bg-gray-100 rounded-xl px-3 py-2 border border-gray-200">
+        <View className="flex-row items-center bg-gray-100 rounded-xl px-3 py-3 border border-gray-200">
           <Ionicons name="search" size={18} color="#6B7280" />
 
           <TextInput
@@ -114,14 +175,20 @@ export default function HomeScreen() {
             className="flex-1 ml-2 text-[13px] text-gray-900"
           />
 
-          <Pressable className="h-9 w-9 rounded-xl bg-white border border-gray-200 items-center justify-center">
-            <Ionicons name="filter-outline" size={18} color="#111827" />
+          <Pressable className="h-9 w-9 items-center justify-center">
+            <Ionicons name="location" size={24} color="#F2B233" />
           </Pressable>
         </View>
       </View>
 
-      {/* ✅ Category chips */}
-      <View className="mt-4">
+      {/* ✅ Categories Section - Horizontal Scroll */}
+      <View className="mt-6">
+        <View className="mb-4 px-4">
+          <Text className="text-[18px] font-bold text-gray-900">
+            Categories
+          </Text>
+        </View>
+
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -130,20 +197,25 @@ export default function HomeScreen() {
           contentContainerStyle={{ paddingHorizontal: 16 }}
           renderItem={({ item }) => {
             const active = item === activeCategory;
-
             return (
               <Pressable
                 onPress={() => setActiveCategory(item)}
-                className={`mr-3 px-5 py-3 rounded-2xl border ${
-                  active
-                    ? "bg-[#F2B233] border-[#F2B233]"
-                    : "bg-gray-50 border-gray-200"
-                }`}
-                android_ripple={{ color: "#E5E7EB" }}
+                className="mr-4 items-center"
               >
+                <View
+                  className={`h-14 w-14 rounded-2xl items-center justify-center ${
+                    active ? "bg-[#F2B233]" : "bg-gray-100"
+                  }`}
+                >
+                  <Ionicons
+                    name={getCategoryIcon(item) as any}
+                    size={24}
+                    color={active ? "#FFFFFF" : "#111827"}
+                  />
+                </View>
                 <Text
-                  className={`text-[12px] font-bold ${
-                    active ? "text-white" : "text-gray-800"
+                  className={`text-[11px] mt-1 font-medium ${
+                    active ? "text-gray-900" : "text-gray-600"
                   }`}
                 >
                   {item}
@@ -154,11 +226,20 @@ export default function HomeScreen() {
         />
       </View>
 
-      {/* ✅ Posts list */}
-      <View className="flex-1 px-4 pt-4 bg-gray-100">
+      {/* ✅ Popular Services Section */}
+      <View className="flex-1 px-4 pt-4 bg-white">
+        <View className="flex-row items-center justify-between mb-3">
+          <Text className="text-[18px] font-bold text-gray-900">
+            Popular Services
+          </Text>
+          <Text className="text-[13px] text-gray-500">
+            {filteredPosts.length} services
+          </Text>
+        </View>
+
         {loading ? (
           <View className="items-center justify-center py-10">
-            <ActivityIndicator size="large" />
+            <ActivityIndicator size="large" color="#F2B233" />
             <Text className="mt-2 text-gray-500">Loading posts...</Text>
           </View>
         ) : (
