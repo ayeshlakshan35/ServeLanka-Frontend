@@ -4,22 +4,22 @@ service cloud.firestore {
 
     // User profile
     match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
 
       // Posts under a user
       match /posts/{postId} {
         // Owner-only writes
         allow create, update, delete: if request.auth != null && request.auth.uid == uid;
 
-        // Reads: owner OR any verified post (public)
-        allow read: if (request.auth != null && request.auth.uid == uid)
-                    || resource.data.isProviderVerified == true;
+        // Reads: any authenticated user can read all posts
+        allow read: if request.auth != null;
       }
     }
 
-    // Collection group reads for /posts (Home feed) — public for verified posts
+    // Collection group reads for /posts (Home feed) — allow authenticated users to read all posts
     match /{path=**}/posts/{postId} {
-      allow read: if resource.data.isProviderVerified == true;
+      allow read: if request.auth != null;
     }
 
     // National IDs

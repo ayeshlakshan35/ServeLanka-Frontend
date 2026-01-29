@@ -5,15 +5,15 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-  ActionSheetIOS,
-  Alert,
-  Image,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
+    ActionSheetIOS,
+    Alert,
+    Image,
+    Platform,
+    Pressable,
+    ScrollView,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 
 import { createPost } from "../../src/services/createpost";
@@ -103,7 +103,7 @@ export default function CreatePostScreen() {
       });
 
       Alert.alert("Success", "Post created successfully!");
-      router.back();
+      router.replace("/(tabs)/home");
     } catch (err: any) {
       Alert.alert("Failed", err?.message || "Something went wrong");
     } finally {

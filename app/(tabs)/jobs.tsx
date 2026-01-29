@@ -1,5 +1,8 @@
+
 import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -7,39 +10,38 @@ import {
   View,
 } from "react-native";
 
-const JOBS = [
-  {
-    id: 1,
-    title: "House Cleaning Service",
-    category: "Cleaning",
-    description:
-      "Looking for a reliable and thorough house cleaner for a weekly service. Must be experienced and have own supplies. References required.",
-  },
-  {
-    id: 2,
-    title: "Garden Maintenance",
-    category: "Gardening",
-    description:
-      "Need a gardener for regular lawn mowing, weeding, and general garden upkeep. Flexible hours, but consistent service is a must.",
-  },
-  {
-    id: 3,
-    title: "Dog Walking",
-    category: "Pet Care",
-    description:
-      "Seeking a friendly and responsible dog walker for daily walks. Experience with large breeds preferred. Background check required.",
-  },
-  {
-    id: 4,
-    title: "IT Support Specialist",
-    category: "Tech",
-    description:
-      "On-site IT support needed for small business. Troubleshooting hardware/software, network issues. Part-time, flexible schedule.",
-  },
-];
+import { listJobs } from "../../src/services/jobs.api";
+
+type Job = {
+  id: string;
+  title: string;
+  category: string;
+  description: string;
+};
 
 export default function Jobs() {
   const router = useRouter();
+
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load jobs from Firestore
+  const loadJobs = async () => {
+    try {
+      setLoading(true);
+      const data = await listJobs(50);
+      setJobs(data);
+    } catch (error) {
+      console.log("Error loading jobs:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Run when screen opens
+  useEffect(() => {
+    loadJobs();
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -57,26 +59,35 @@ export default function Jobs() {
 
       {/* Job List */}
       <ScrollView contentContainerStyle={styles.list}>
-        {JOBS.map((job) => (
-          <View key={job.id} style={styles.card}>
-            <Text style={styles.title}>{job.title}</Text>
+        {loading ? (
+          <ActivityIndicator size="large" color="#2563EB" />
+        ) : jobs.length === 0 ? (
+          <Text style={styles.emptyText}>No jobs posted yet</Text>
+        ) : (
+          jobs.map((job) => (
+            <View key={job.id} style={styles.card}>
+              <Text style={styles.title}>{job.title}</Text>
 
-            <Text style={styles.category}>
-              Category:{" "}
-              <Text style={styles.categoryValue}>{job.category}</Text>
-            </Text>
+              <Text style={styles.category}>
+                Category:{" "}
+                <Text style={styles.categoryValue}>
+                  {job.category || "Other"}
+                </Text>
+              </Text>
 
-            <Text style={styles.description}>{job.description}</Text>
+              <Text style={styles.description} numberOfLines={3}>
+                {job.description}
+              </Text>
 
-            <TouchableOpacity
-  style={styles.readMoreButton}
-  onPress={() => router.push(`/job/${job.id}`)}
->
-  <Text style={styles.readMoreText}>Read More</Text>
-</TouchableOpacity>
-
-          </View>
-        ))}
+              <TouchableOpacity
+                style={styles.readMoreButton}
+                onPress={() => router.push(`/job/${job.id}`)}
+              >
+                <Text style={styles.readMoreText}>Read More</Text>
+              </TouchableOpacity>
+            </View>
+          ))
+        )}
       </ScrollView>
     </View>
   );
@@ -110,6 +121,11 @@ const styles = StyleSheet.create({
   },
   list: {
     padding: 16,
+  },
+  emptyText: {
+    textAlign: "center",
+    color: "#6B7280",
+    marginTop: 40,
   },
   card: {
     borderWidth: 1,

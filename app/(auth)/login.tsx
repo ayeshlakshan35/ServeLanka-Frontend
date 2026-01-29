@@ -31,21 +31,17 @@ export default function Login() {
     } catch (error: any) {
       Alert.alert(
         "Login Error",
-        error.message || "An error occurred during login."
+        error.message || "An error occurred during login.",
       );
     } finally {
       setLoading(false);
     }
   };
 
-
   return (
     <View style={styles.container}>
-
-  
       <Text style={styles.pageTitle}>Log in</Text>
 
-    
       <View style={styles.inputContainer}>
         <Ionicons name="mail-outline" size={20} color="#6B7280" />
         <TextInput
@@ -59,7 +55,6 @@ export default function Login() {
         />
       </View>
 
-    
       <View style={styles.inputContainer}>
         <Ionicons name="lock-closed-outline" size={20} color="#6B7280" />
         <TextInput
@@ -76,18 +71,22 @@ export default function Login() {
         <Text style={styles.forgotText}>Forgot password?</Text>
       </TouchableOpacity>
 
-    
-      <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={loading}>
-        <Text style={styles.loginText}>{loading ? "Logging in..." : "Login"}</Text>
-      </TouchableOpacity>
-
-      
-      <TouchableOpacity onPress={() => router.push("/register")}>
-        <Text style={styles.registerText}>
-          Don’t have an account? <Text style={styles.registerLink}>Register</Text>
+      <TouchableOpacity
+        style={styles.loginButton}
+        onPress={handleLogin}
+        disabled={loading}
+      >
+        <Text style={styles.loginText}>
+          {loading ? "Logging in..." : "Login"}
         </Text>
       </TouchableOpacity>
 
+      <TouchableOpacity onPress={() => router.push("/register")}>
+        <Text style={styles.registerText}>
+          Don’t have an account?{" "}
+          <Text style={styles.registerLink}>Register</Text>
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 }
