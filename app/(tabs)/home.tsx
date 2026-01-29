@@ -249,7 +249,7 @@ export default function HomeScreen() {
             renderItem={({ item }) => (
               <HomePostCard
                 post={item}
-                onPressBook={(p) => console.log("Book", p.id)}
+                onPressBook={(p) => router.push(`/book/${p.uid}_${p.id}`)}
                 onPressLike={(p) => console.log("Like", p.id)}
                 onPressShare={(p) => console.log("Share", p.id)}
               />

@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   Modal,
@@ -15,7 +16,8 @@ import {
 
 import { globalStyles } from "../../constants/globalStyles";
 import { COLORS } from "../../constants/index";
-import { SERVICES } from "../../constants/services";
+import { HomePost, listenHomePosts } from "../../src/services/homecontroller";
+import { getUserProfile, UserDoc } from "../../src/services/users.api";
 
 export default function BookingScreen() {
   const { id } = useLocalSearchParams();
@@ -27,11 +29,52 @@ export default function BookingScreen() {
   const [selectedPayment, setSelectedPayment] = useState("cash");
   const [serviceAddress, setServiceAddress] = useState("");
   const [additionalNotes, setAdditionalNotes] = useState("");
+  const [post, setPost] = useState<HomePost | null>(null);
+  const [providerData, setProviderData] = useState<UserDoc | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Find specific service based on ID
-  const service = SERVICES.find((s) => s.id === id);
+  // ✅ Fetch post data from Firebase
+  useEffect(() => {
+    if (!id) return;
 
-  if (!service) {
+    setLoading(true);
+    const unsub = listenHomePosts(
+      (posts) => {
+        const foundPost = posts.find((p) => `${p.uid}_${p.id}` === id);
+        if (foundPost) {
+          setPost(foundPost);
+          // Fetch provider data
+          getUserProfile(foundPost.uid)
+            .then((data) => setProviderData(data))
+            .catch((err) => console.log("Failed to load provider:", err));
+        }
+        setLoading(false);
+      },
+      (err) => {
+        console.log("Error fetching posts:", err);
+        setLoading(false);
+      },
+      { pageSize: 100 },
+    );
+
+    return () => unsub();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <View
+        style={[
+          globalStyles.container,
+          { justifyContent: "center", alignItems: "center" },
+        ]}
+      >
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text>Loading service...</Text>
+      </View>
+    );
+  }
+
+  if (!post) {
     return (
       <View
         style={[
@@ -43,6 +86,19 @@ export default function BookingScreen() {
       </View>
     );
   }
+
+  // Map post to service format for display
+  const service = {
+    id: post.id,
+    title: post.category,
+    description: post.notes,
+    imageUrl: post.imageUrl,
+    price: `LKR ${post.price.toLocaleString()}`,
+    provider: {
+      name: providerData?.name || "Service Provider",
+      avatar: providerData?.photoUrl || "",
+    },
+  };
 
   return (
     <ScrollView
@@ -411,6 +467,8 @@ export default function BookingScreen() {
                 paymentMethod: selectedPayment,
                 providerName: service.provider.name,
                 providerImage: service.provider.avatar,
+                providerUid: post.uid,
+                postId: post.id,
               },
             });
           }}

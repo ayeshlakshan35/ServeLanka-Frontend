@@ -1,14 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect } from "react";
 import {
   Image,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
+import { auth } from "../../src/config/firebase";
+import { createBooking } from "../../src/services/booking";
+import { getUserProfile } from "../../src/services/users.api";
 
 export default function ConfirmationPage() {
   const router = useRouter();
@@ -23,12 +26,57 @@ export default function ConfirmationPage() {
     paymentMethod = "Cash",
     providerName = "Service Provider",
     providerImage = "https://i.pravatar.cc/100?u=2",
+    providerUid = "",
+    postId = "",
+    serviceImage = "",
   } = params;
 
   // Ensure providerImage is a string (handle array from route params)
   const providerImageUrl = Array.isArray(providerImage)
     ? providerImage[0]
     : providerImage;
+
+  const serviceImageUrl = Array.isArray(serviceImage)
+    ? serviceImage[0]
+    : serviceImage;
+
+  // ✅ Save booking notification when page loads
+  useEffect(() => {
+    const saveBooking = async () => {
+      try {
+        const user = auth.currentUser;
+        if (!user || !providerUid) return;
+
+        // Get customer profile for name
+        const customerProfile = await getUserProfile(user.uid);
+        const customerName = customerProfile?.name || "Customer";
+
+        // Create booking record
+        await createBooking({
+          providerId: String(providerUid),
+          userId: user.uid,
+          postId: String(postId),
+          serviceName: String(serviceName),
+          serviceImage: serviceImageUrl || "",
+          customerName: customerName,
+          customerPhone: customerProfile?.phone || "",
+          selectedDate: String(selectedDate),
+          selectedTime: String(selectedTime),
+          serviceAddress: String(serviceAddress),
+          additionalNotes: String(additionalNotes),
+          paymentMethod: (String(paymentMethod) === "card"
+            ? "card"
+            : "cash") as "cash" | "card",
+        });
+
+        console.log("Booking saved successfully");
+      } catch (err) {
+        console.log("Error saving booking:", err);
+      }
+    };
+
+    saveBooking();
+  }, []);
 
   return (
     <View style={styles.container}>

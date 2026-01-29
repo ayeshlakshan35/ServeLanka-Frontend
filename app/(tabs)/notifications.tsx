@@ -1,138 +1,181 @@
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
+import { useRouter } from "expo-router";
+import { onAuthStateChanged } from "firebase/auth";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   FlatList,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { globalStyles } from "../../constants/globalStyles";
-
-const NOTIFICATIONS = [
-  {
-    id: "1",
-    title: "Booking Confirmed",
-    description:
-      "Your plumbing service with AquaFlow has been confirmed for tomorrow.",
-    time: "2 hours ago",
-    icon: "calendar",
-    iconBg: "#E7F0FF",
-    iconColor: "#3B82F6",
-    unread: true,
-  },
-  {
-    id: "2",
-    title: "New Job Posting",
-    description:
-      "Experienced Electrician needed in Colombo 05. Tap to view details.",
-    time: "3 hours ago",
-    icon: "briefcase",
-    iconBg: "#FFF9E7",
-    iconColor: "#F3A712",
-    unread: true,
-  },
-  {
-    id: "3",
-    title: "Profile Updated",
-    description: "Your profile information has been successfully updated.",
-    time: "Yesterday",
-    icon: "person-outline",
-    iconBg: "#F3F4F6",
-    iconColor: "#6B7280",
-    unread: false,
-  },
-  {
-    id: "4",
-    title: "Payment Reminder",
-    description:
-      "Reminder: Your payment for gardening service is due tomorrow.",
-    time: "Yesterday",
-    icon: "card-outline",
-    iconBg: "#FFE7E7",
-    iconColor: "#EF4444",
-    unread: true,
-  },
-  {
-    id: "5",
-    title: "Welcome to ServeLanka!",
-    description:
-      "Explore our latest services and get 10% off your first booking.",
-    time: "2 days ago",
-    icon: "star-outline",
-    iconBg: "#E7FFE7",
-    iconColor: "#22C55E",
-    unread: false,
-  },
-  {
-    id: "6",
-    title: "Request Accepted",
-    description: 'Service provider "Clean & Shine" has accepted your request.',
-    time: "3 days ago",
-    icon: "checkmark-circle-outline",
-    iconBg: "#E7F0FF",
-    iconColor: "#3B82F6",
-    unread: true,
-  },
-  {
-    id: "7",
-    title: "Privacy Policy Update",
-    description: "We have updated our terms of service and privacy policy.",
-    time: "1 week ago",
-    icon: "document-text-outline",
-    iconBg: "#F3F4F6",
-    iconColor: "#6B7280",
-    unread: false,
-  },
-  {
-    id: "8",
-    title: "System Maintenance",
-    description:
-      "Servers will be down for maintenance on Sunday from 2 AM to 4 AM.",
-    time: "1 week ago",
-    icon: "construct-outline",
-    iconBg: "#FFF9E7",
-    iconColor: "#F3A712",
-    unread: false,
-  },
-];
+import { auth } from "../../src/config/firebase";
+import {
+  Booking,
+  deleteBooking,
+  listenProviderBookings,
+  updateBookingStatus,
+} from "../../src/services/booking";
 
 export default function NotificationsScreen() {
-  const renderItem = ({ item }: { item: (typeof NOTIFICATIONS)[0] }) => (
-    <View style={styles.notificationCard}>
-      <View style={[styles.iconContainer, { backgroundColor: item.iconBg }]}>
-        <Ionicons name={item.icon as any} size={22} color={item.iconColor} />
+  const router = useRouter();
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+
+  useEffect(() => {
+    let unsubBookings: (() => void) | null = null;
+
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (unsubBookings) {
+        unsubBookings();
+        unsubBookings = null;
+      }
+
+      if (!user) {
+        setBookings([]);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      unsubBookings = listenProviderBookings(
+        user.uid,
+        (data) => {
+          setBookings(data);
+          setLoading(false);
+        },
+        (err) => {
+          console.log("bookings error:", err);
+          setLoading(false);
+        },
+      );
+    });
+
+    return () => {
+      if (unsubBookings) unsubBookings();
+      unsubAuth();
+    };
+  }, []);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const handleDelete = async () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    await Promise.all(ids.map((id) => deleteBooking(id)));
+    setSelectedIds([]);
+    setSelectMode(false);
+  };
+
+  const renderItem = ({ item }: { item: Booking }) => (
+    <TouchableOpacity
+      style={[
+        styles.notificationCard,
+        selectMode && selectedSet.has(item.id) && styles.selectedCard,
+      ]}
+      onPress={() =>
+        selectMode
+          ? toggleSelect(item.id)
+          : router.push(`/notifications/${item.id}`)
+      }
+      activeOpacity={0.9}
+    >
+      <View style={[styles.iconContainer, { backgroundColor: "#E7F0FF" }]}>
+        <Ionicons name="calendar" size={22} color="#3B82F6" />
       </View>
 
       <View style={styles.textContainer}>
         <View style={styles.headerRow}>
-          <Text style={styles.notifTitle}>{item.title}</Text>
-          {item.unread && <View style={styles.unreadDot} />}
+          <Text style={styles.notifTitle}>New Booking</Text>
+          <View style={styles.statusBadge}>
+            <Text style={styles.statusText}>{item.status}</Text>
+          </View>
         </View>
-        <Text style={styles.notifDescription}>{item.description}</Text>
-        <Text style={styles.notifTime}>{item.time}</Text>
+        <Text style={styles.notifDescription}>
+          {item.customerName} booked {item.serviceName}
+        </Text>
+        <Text style={styles.notifTime}>
+          {item.selectedDate} • {item.selectedTime}
+        </Text>
+
+        {selectMode && (
+          <View style={styles.selectIcon}>
+            <Ionicons
+              name={selectedSet.has(item.id) ? "checkbox" : "square-outline"}
+              size={20}
+              color={selectedSet.has(item.id) ? "#22C55E" : "#94A3B8"}
+            />
+          </View>
+        )}
+
+        {item.status === "pending" && (
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.acceptBtn]}
+              onPress={() => updateBookingStatus(item.id, "accepted")}
+            >
+              <Text style={styles.actionText}>Accept</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.rejectBtn]}
+              onPress={() => updateBookingStatus(item.id, "rejected")}
+            >
+              <Text style={styles.actionText}>Reject</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView style={globalStyles.container}>
+    <View style={globalStyles.container}>
       <View style={styles.screenHeader}>
         <Text style={styles.screenTitle}>Notifications</Text>
-        <TouchableOpacity>
-          <Ionicons name="trash-outline" size={24} color="#666" />
-        </TouchableOpacity>
+        {selectMode ? (
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={handleDelete}>
+              <Ionicons name="trash-outline" size={24} color="#EF4444" />
+            </TouchableOpacity>
+            <View style={{ width: 12 }} />
+            <TouchableOpacity
+              onPress={() => {
+                setSelectMode(false);
+                setSelectedIds([]);
+              }}
+            >
+              <Ionicons name="close-outline" size={26} color="#666" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity onPress={() => setSelectMode(true)}>
+            <Ionicons name="trash-outline" size={24} color="#666" />
+          </TouchableOpacity>
+        )}
       </View>
 
       <FlatList
-        data={NOTIFICATIONS}
+        data={bookings}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <Text style={styles.emptyText}>
+            {loading ? "Loading bookings..." : "No bookings yet"}
+          </Text>
+        }
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -160,7 +203,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     borderWidth: 1,
     borderColor: "#F0F0F0",
-    // Shadow for iOS/Android
     elevation: 2,
     shadowColor: "#000",
     shadowOpacity: 0.05,
@@ -188,12 +230,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#1A2533",
   },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#3B82F6",
-  },
   notifDescription: {
     fontSize: 14,
     color: "#64748B",
@@ -203,5 +239,55 @@ const styles = StyleSheet.create({
   notifTime: {
     fontSize: 12,
     color: "#94A3B8",
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "#F3F4F6",
+  },
+  statusText: {
+    fontSize: 11,
+    color: "#6B7280",
+    textTransform: "capitalize",
+  },
+  actionRow: {
+    flexDirection: "row",
+    marginTop: 10,
+  },
+  actionBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginRight: 10,
+  },
+  acceptBtn: {
+    backgroundColor: "#22C55E",
+  },
+  rejectBtn: {
+    backgroundColor: "#EF4444",
+  },
+  actionText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 12,
+  },
+  emptyText: {
+    textAlign: "center",
+    color: "#94A3B8",
+    marginTop: 40,
+  },
+  selectedCard: {
+    borderColor: "#22C55E",
+    backgroundColor: "#F0FDF4",
+  },
+  selectIcon: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
   },
 });
